@@ -4,7 +4,7 @@
 // 以及最下方 buildSystemPrompt() 給 AI 的規則說明。
 // =============================================================
 
-import { DRINKS, MILK_LABEL } from './drinks.js';
+import { DRINKS, MILK_LABEL } from './drinks.js?v=202610121515';
 
 export const EFFECTIVE_DATE = '2026/10/12';
 export const ECO_CUP_DISCOUNT = 10;
@@ -86,6 +86,7 @@ export const ITEMS = [
     names: ['低咖啡因', '無咖啡因', '低因', 'decaf'] },
   { id: 'esp_upgrade', label: '升級特選濃縮咖啡', price: 15, perServing: true, group: 'esp', regions: ['esp_upgrade'],
     names: ['升級特選濃縮咖啡', '升級精選濃縮咖啡', '特選濃縮咖啡', '精選濃縮咖啡', '升級特選濃縮', '升級精選濃縮',
+      '升級特選咖啡豆', '升級精選咖啡豆', '特選咖啡豆', '精選咖啡豆',
       '升級特選豆', '升級精選豆', '特選濃縮', '精選濃縮', '特選豆', '精選豆', '升級特選', '升級精選',
       { n: '特選', add: true }, { n: '精選', add: true }] },
   { id: 'esp_extra', label: '多加一份濃縮咖啡', price: 15, perServing: true, group: 'esp', regions: ['esp_extra'],
