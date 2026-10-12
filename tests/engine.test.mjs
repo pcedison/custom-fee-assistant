@@ -129,6 +129,16 @@ t('要補按鈕的版本：加上補牛奶後多 $15', () => {
   assert.equal(yes.basePrice + yes.addTotal - (base.basePrice + base.addTotal), 15);
 });
 
+t('「升級精選豆」＝特選（不含濃縮的飲品 +30）', () => assert.equal(order('冰醇濃抹茶那堤，升級精選豆').addTotal, 30));
+t('看不懂的詞會明講', () => assert.ok(order('冰那堤加珍珠').notes.some(n => /沒看懂：「珍珠」/.test(n))));
+t('常見點法不會誤報看不懂', () => {
+  for (const q of ['蜜柚紅茶少冰1下糖', '純濃抹茶去冰加牛奶加一匙抹茶粉', '冰美式大杯去冰補奶 環保杯', '特選馥郁那堤大杯去冰',
+    '冰那堤換燕麥奶', '焦糖瑪奇朵換成榛果', '我要一杯大杯冰那堤多少錢', '冰醇濃抹茶那堤加兩份特選濃縮', '那堤有奶嗎', '冰那堤正常冰正常甜']) {
+    const o = order(q);
+    assert.ok(!o.notes.some(n => /沒看懂/.test(n)), `${q} → ${o.notes.join(' / ')}`);
+  }
+});
+
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {
   const r = reply('補飲料是什麼意思？');
