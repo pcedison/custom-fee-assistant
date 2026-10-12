@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122132';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122132';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122132';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122158';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify } from './engine.js?v=202610122158';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122158';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -12,6 +12,8 @@ const API_URL = (window.APP_CONFIG && 'apiUrl' in window.APP_CONFIG)
   ? window.APP_CONFIG.apiUrl
   : (location.hostname.endsWith('github.io') ? null : '/api/chat');
 const MARK_CHIP = '看不懂，標給我看';
+// 網址加 ?debug=1：訊息下方顯示語意比對分數（調整例句、門檻用）
+const DEBUG = new URLSearchParams(location.search).has('debug');
 
 const $ = sel => document.querySelector(sel);
 const log = $('#log');
@@ -353,7 +355,7 @@ function setupCard(row, firstOrder, baseText) {
 }
 
 // ---------- AI ----------
-async function askAI() {
+async function askAI(route = null) {
   if (!API_URL) return { error: 'no_backend' };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 40000);
@@ -361,13 +363,14 @@ async function askAI() {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: state.history.slice(-10) }),
+      body: JSON.stringify({ messages: state.history.slice(-10), ...(route ? { route } : {}) }),
       signal: ctrl.signal,
     });
     let data = {};
     try { data = await res.json(); } catch { /* 非 JSON（例如本機預覽沒有後端） */ }
+    if (res.ok && data.route === 'local') return { route: 'local', sem: data.sem };
     if (!res.ok || !data.reply) return { error: data.error || ([404, 405].includes(res.status) ? 'no_backend' : 'upstream') };
-    return { reply: data.reply };
+    return { reply: data.reply, route: data.route, sem: data.sem };
   } catch (e) {
     return { error: e.name === 'AbortError' ? 'timeout' : 'network' };
   } finally {
@@ -391,6 +394,11 @@ function aiFirst(text, local) {
 }
 
 const RE_HEALTH = /(過敏|乳糖|孕婦|懷孕|咖啡因|熱量|卡路里|健康|減肥|吃素|素食|糖尿病)/;
+
+function semNote(sem, route) {
+  if (!DEBUG || !sem) return '';
+  return `［語意 ${sem.topic} ${sem.score}｜最像 ${sem.best} ${sem.bestScore}｜未涵蓋 ${sem.near} → ${route === 'local' ? '預寫' : 'AI'}］`;
+}
 
 function dietReply(kind) {
   const fb = dietFallback(kind);
@@ -432,7 +440,11 @@ async function send(text) {
     // 不含奶／過敏的推薦題（不是在點某一杯）：交給 AI 並檢查；沒有 AI 時用官網成分整理的固定答案
     // 沿用上一句需求的短追問（例如「那熱的呢」）：本身是別的問題（規則認得）就照規則回答
     const dietAsk = diet.recommend && !local?.order && !(diet.inherited && local);
-    const preferAI = aiFirst(text, local) || (dietAsk && !!API_URL);
+    // 「我意思是…」「我是問…」：上一個回答沒答到，直接交給 AI（不重複預寫答案）
+    const clarify = !!API_URL && state.history.length > 1 && isClarify(text);
+    const preferAI = aiFirst(text, local) || (dietAsk && !!API_URL) || clarify;
+    // 關鍵字找到的預寫答案：先請後端用語意比對確認真的回答到，不夠像才由 AI 回答
+    const verify = !!(API_URL && local?.faq?.length && !preferAI);
     if (dietAsk && !API_URL) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
@@ -441,14 +453,19 @@ async function send(text) {
     }
     const allergy = diet.diet === 'allergy' && !diet.inherited;
     if (local && allergy) local.health = 'allergy';
-    if (local && !needsAI(local) && !preferAI) {
+    if (local && !needsAI(local) && !preferAI && !verify) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
       botReply(local, text);
       return;
     }
-    const ai = await askAI();
+    const ai = await askAI(verify ? { topics: local.faq } : clarify ? { clarify: true, topics: state.lastTopics || [] } : null);
     hideTyping();
+    if (ai.route === 'local' && local) {
+      if (DEBUG) local.meta = `依收費規則回覆　${semNote(ai.sem, 'local')}`;
+      botReply(local, text);
+      return;
+    }
     if (ai.reply) {
       // AI 把口語點單改寫成標準點單 → 交給收費規則計算，金額不由 AI 決定
       const ord = aiOrder(ai.reply);
@@ -459,7 +476,7 @@ async function send(text) {
         botReply(ord.r, text);
         return;
       }
-      if (local && !preferAI) {
+      if (local && !preferAI && !verify) {
         const note = !ord ? cleanAiText(ai.reply) : '';
         if (note && local.order?.kind === 'drink') local.order.aiNote = note;
         botReply(local, text);
@@ -478,7 +495,8 @@ async function send(text) {
       if (g && g.status !== 'ok') console.warn(`[diet] AI 回答提到含奶飲品（${g.status}）：`, g.problems);
       botReply({
         source: 'ai',
-        meta: g?.status === 'replaced' ? '依官網成分整理' : (g?.status === 'repaired' ? 'AI 回覆，已依官網成分拿掉含奶飲品' : ''),
+        meta: (g?.status === 'replaced' ? '依官網成分整理' : (g?.status === 'repaired' ? 'AI 回覆，已依官網成分拿掉含奶飲品' : (DEBUG && ai.sem ? 'AI 回覆，僅供參考' : '')))
+          + (DEBUG && ai.sem ? `　${semNote(ai.sem, 'ai')}` : ''),
         refs: g ? g.refs : p.drinks,
         refsTitle: g ? '不含奶的飲品' : undefined,
         health,

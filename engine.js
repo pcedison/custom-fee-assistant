@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122132';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122132';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122158';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122158';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -760,7 +760,13 @@ export function orderToText(o) {
 // 看不懂／想看圖
 // ---------------------------------------------------------------
 const RE_CONFUSED = /(看不懂|聽不懂|不懂|沒懂|不太懂|搞不懂|不明白|不了解|不理解|不清楚|看不清|什麼意思|甚麼意思|啥意思|意思是|是指|指什麼|是什麼|是甚麼|什麼是|甚麼是|是啥|哪裡|在哪|圖上|標出|標給|標示|畫給|圈出|指給|給我看|霧煞煞|解釋|霧沙沙)/;
+// 顧客在澄清上一題（「我意思是…」「我是問…」）：前一個回答沒答到，不是看不懂
+const RE_CLARIFY = /我的?意思是|我是說|我是問|我要問的是|我問的是|我想問的是|不是問這個|不是這個意思|不是我要問的|你誤會|答非所問|我不是問/;
+export function isClarify(text) {
+  return RE_CLARIFY.test(normalize(text));
+}
 export function isConfused(norm) {
+  if (RE_CLARIFY.test(norm)) return false;
   if (RE_CONFUSED.test(norm)) return true;
   return /^(蛤+|啊+\?*|\?+|嗯\?+|什麼\?*|甚麼\?*)$/.test(norm);
 }
@@ -959,6 +965,7 @@ export function localReply(input, state = {}) {
       source: 'local',
       text: specific.map(t => t.answer).join('\n\n'),
       topics: specific.map(t => t.id),
+      faq: specific.map(t => t.id), // 關鍵字找到的預寫答案：有 AI 時會先做語意確認
       itemRegions: quote.regions,
       chips: [...(hasRegions ? ['看不懂，標給我看'] : []), ...followChips(specific)].slice(0, 3),
       markable: !!hasRegions,
@@ -967,7 +974,7 @@ export function localReply(input, state = {}) {
 
   if (topics.length) {
     const t = topics[0];
-    return { source: 'local', text: t.answer, topics: [], chips: t.follow };
+    return { source: 'local', text: t.answer, topics: [], faq: [t.id], chips: t.follow };
   }
 
   return null;

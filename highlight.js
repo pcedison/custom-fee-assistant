@@ -1,7 +1,7 @@
 // =============================================================
 // 在收費圖表上畫橘色螢光筆，回傳標示後的圖片（整張 + 標示處放大）
 // =============================================================
-import { REGIONS, IMAGE } from './kb.js?v=202610122132';
+import { REGIONS, IMAGE } from './kb.js?v=202610122158';
 
 let imgPromise = null;
 export function loadMenuImage(src) {
