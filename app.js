@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js';
-import { renderHighlight, loadMenuImage } from './highlight.js';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610121515';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610121515';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610121515';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -97,6 +97,13 @@ function renderOrder(o, opts = {}) {
       ${s.altNote ? `<p class="drink-info">${esc(s.altNote)}</p>` : ''}
       ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
     </div>`;
+  if (opts.iceSel) {
+    html += `
+      <div class="ice-sel" role="group" aria-label="冰量">
+        <span class="ice-label">冰量</span>
+        ${['正常冰', '少冰', '去冰'].map(v => `<button type="button" class="ice-btn" data-ice="${v}" aria-pressed="${opts.iceSel === v}">${v}</button>`).join('')}
+      </div>`;
+  }
   if (o.lines.length) {
     const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount, l.status)}</li>`).join('');
     const total = o.basePrice != null
@@ -236,7 +243,7 @@ function botReply(r, userText) {
 
   if (r.orderText) state.lastOrder = r.orderText;
   state.pending = r.pending || null;
-  if (r.order?.kind === 'drink' && r.order.ask && r.orderText) setupAsk(row, r.order, r.orderText);
+  if (r.order?.kind === 'drink' && r.orderText && (r.order.ask || r.order.iceSelectable)) setupCard(row, r.order, r.orderText);
   if (r.topics?.length) state.lastTopics = r.topics;
   if (r.topics?.length || r.itemRegions?.length) {
     state.lastItemRegions = r.itemRegions || [];
@@ -246,32 +253,49 @@ function botReply(r, userText) {
   setChips(r.chips?.length ? r.chips : WELCOME_CHIPS.slice(0, 3), userText);
 }
 
-// 橘框裡的「要補／不補」：直接在同一張卡片切換價格
-function setupAsk(row, baseOrder, baseText) {
+// 卡片上的按鈕：冰量（正常冰／少冰／去冰）＋橘框「要補／不補」，在同一張卡片即時切換價格
+function setupCard(row, firstOrder, baseText) {
   const bubble = row.querySelector('.bubble');
-  const ask = baseOrder.ask;
-  const yesText = baseText + ask.add;
-  const yesOrder = buildOrder(yesText);
-  if (!yesOrder || yesOrder.kind !== 'drink') return;
-  const draw = choice => {
-    const o = choice === 'yes' ? yesOrder : baseOrder;
-    bubble.innerHTML = renderOrder(o, { ask, choice });
-    bubble.querySelectorAll('.ask-btn').forEach(b => b.addEventListener('click', () => pick(b.dataset.choice)));
+  const showIce = !!firstOrder.iceSelectable;
+  let ice = showIce ? '正常冰' : null;
+  let choice = null;
+
+  const current = () => {
+    const text = baseText + (ice && ice !== '正常冰' ? ice : '');
+    const base = buildOrder(text);
+    const ask = base?.ask || null;
+    const o = choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
+    return { text: choice === 'yes' && ask ? text + ask.add : text, o, ask };
   };
-  const pick = choice => {
-    draw(choice);
-    const o = choice === 'yes' ? yesOrder : baseOrder;
-    state.lastOrder = choice === 'yes' ? yesText : baseText;
-    state.pending = null;
+
+  const draw = () => {
+    const { o, ask } = current();
+    if (!o || o.kind !== 'drink') return;
+    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null });
+    bubble.querySelectorAll('.ice-btn').forEach(b => b.addEventListener('click', () => {
+      if (ice === b.dataset.ice) return;
+      ice = b.dataset.ice;
+      choice = null;
+      commit(`${ice}`);
+    }));
+    bubble.querySelectorAll('.ask-btn').forEach(b => b.addEventListener('click', () => {
+      choice = b.dataset.choice;
+      commit(choice === 'yes' ? `要${current().ask?.add || '補'}` : '不補');
+    }));
+  };
+
+  const commit = said => {
+    draw();
+    const { text, o, ask } = current();
+    state.lastOrder = text;
+    state.pending = ask && !choice ? { add: ask.add } : null;
     state.lastItemRegions = o.regions;
     state.lastTopics = o.topics.length ? o.topics : state.lastTopics;
     state.lastWasQuote = true;
-    state.history.push(
-      { role: 'user', content: choice === 'yes' ? `要${ask.add}` : '不補' },
-      { role: 'assistant', content: orderToText(o) },
-    );
+    state.history.push({ role: 'user', content: said }, { role: 'assistant', content: orderToText(o) });
   };
-  draw(null);
+
+  draw();
 }
 
 // ---------- AI ----------

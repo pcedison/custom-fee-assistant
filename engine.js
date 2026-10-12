@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610121515';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610121515';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -549,6 +549,8 @@ export function buildOrder(norm) {
     tempKnown: pk.tempKnown,
     sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
     basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord,
+    // 冰飲、可補、還沒指定冰量 → 卡片上給「正常冰／少冰／去冰」按鈕
+    iceSelectable: d.t === 'iced' && !iceLess && !refill && !d.noice && (rt === 'milk' || rt === 'tea'),
     regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
     topics: topicIds,
     fixed,
