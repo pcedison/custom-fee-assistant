@@ -40,11 +40,11 @@ t('飲品原價依官網價格', () => assert.match(reply('大杯拿鐵多少錢
 
 console.log('飲品判斷（店長回饋）');
 const order = q => buildOrder(normalize(q));
-t('蜜柚紅茶不含奶：少冰提示補飲料、不出現補奶類', () => {
+t('蜜柚紅茶不含奶：少冰反問補紅茶、不出現補奶類', () => {
   const o = order('蜜柚紅茶少冰1下糖');
   assert.equal(o.drink.n, '冰蜜柚紅茶');
   assert.equal(o.drink.m, 'none');
-  assert.ok(o.tips.some(x => /補飲料（補紅茶）/.test(x)));
+  assert.match(o.ask.sub, /補紅茶（補飲料）/);
   assert.ok(!o.lines.some(l => l.id === 'ice_milk'));
   assert.ok(o.lines.some(l => l.id === 'sweet' && l.amount == null));
 });
@@ -77,6 +77,40 @@ t('飲品試算後按看不懂 → 依那杯解釋並標示', () => {
   assert.match(r.text, /有奶的飲品/);
   assert.ok(r.regions.includes('ice_milk'));
 });
+
+console.log('店長第二輪回饋');
+t('特選馥郁那堤大杯 $170（新制特選 +$15，比官網多 $5）', () => {
+  const o = order('特選馥郁那堤大杯去冰');
+  assert.equal(o.basePrice, 170);
+});
+t('只說去冰：不算錢，立刻反問需要補牛奶嗎', () => {
+  const r = reply('特選馥郁那堤大杯去冰');
+  assert.equal(r.order.addTotal, 0);
+  assert.match(r.order.ask.q, /需要補牛奶嗎/);
+  assert.ok(r.chips.includes('要補牛奶') && r.chips.includes('不用補'));
+});
+t('回答「要」→ 加上補牛奶 +$15', () => {
+  const r = reply('要', { lastOrder: '特選馥郁那堤大杯去冰', pending: { add: '補牛奶' } });
+  assert.equal(r.order.basePrice + r.order.addTotal, 185);
+});
+t('回答「不用補」→ 不加價、不再追問', () => {
+  const r = reply('不用補', { lastOrder: '特選馥郁那堤大杯去冰', pending: { add: '補牛奶' } });
+  assert.equal(r.order.addTotal, 0);
+  assert.equal(r.order.ask, null);
+});
+t('冷萃去冰：不反問，說明不能補', () => {
+  const o = order('香檸蜜柚冷萃咖啡去冰');
+  assert.equal(o.ask, null);
+  assert.ok(o.tips.some(x => /冷萃類飲品不能補/.test(x)));
+});
+t('冷萃硬要補 → 標示不能補、不收費', () => {
+  const o = order('冷萃去冰補滿');
+  const l = o.lines.find(x => x.id === 'ice_drink');
+  assert.ok(l.blocked);
+  assert.equal(o.addTotal, 0);
+});
+t('茶類只說少冰 → 反問需要補茶', () => assert.match(order('蜜柚紅茶少冰').ask.q, /補紅茶/));
+t('那堤去冰補滿 → 補牛奶', () => assert.ok(order('那堤去冰補滿').lines.some(l => l.id === 'ice_milk' && l.amount === 15)));
 
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {

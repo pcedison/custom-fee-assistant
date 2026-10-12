@@ -2,7 +2,7 @@
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
 import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk } from './drinks.js';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType } from './drinks.js';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -343,6 +343,9 @@ export function buildOrder(norm) {
   const iceLess = ids.includes('ice_less');
   const refill = ids.includes('ice_milk') || ids.includes('ice_drink');
   const milky = hasMilk(d);
+  const rt = refillType(d);
+  const milkWord = d.m === 'dairy' ? '牛奶' : (MILK_NAME[d.m] || '牛奶');
+  const iceWord = (itemsText.match(/少冰|去冰|微冰|不要冰|無冰/) || ['少冰'])[0];
   const lines = [];
   const notes = [];
   const tips = [];
@@ -361,20 +364,35 @@ export function buildOrder(norm) {
       if (d.noice) { notes.push('官網註明：這款不開放冰塊、甜度調整。'); continue; }
       if (d.t === 'blended') notes.push('冰沙類飲品的冰量調整，請以門市為準。');
       label = (itemsText.match(/少冰|去冰|微冰|不要冰|無冰/) || ['少冰／去冰'])[0];
-    } else if (it.id === 'ice_milk') {
+    } else if (it.id === 'ice_milk' || it.id === 'ice_drink') {
+      // 有奶的飲品說「補滿」＝補牛奶
+      const asMilk = it.id === 'ice_milk' || (f.tag === 'fill' && rt === 'milk');
+      const lineId = asMilk ? 'ice_milk' : 'ice_drink';
+      if (lineId !== it.id) extraRegions.push(lineId, 'ice_note2');
       if (d.t === 'hot') {
-        amount = null; label = '補奶類';
-        notes.push('補奶類是給少冰／去冰的冰飲；熱飲想多加牛奶，請以門市為準。');
-      } else if (f.tag === 'addmilk' && !iceLess) {
+        amount = null; label = asMilk ? '補牛奶' : '補飲料';
+        notes.push('熱飲沒有冰塊，不適用補牛奶／補飲料；熱飲想多加牛奶，請以門市為準。');
+      } else if (rt === 'nocb') {
+        amount = null; label = asMilk ? '補牛奶' : `補${d.fill || '冷萃'}`;
+        notes.push(`冷萃類飲品不能補。${asMilk ? '想加牛奶請以門市為準。' : ''}`);
+        lines.push({ id: lineId, label, amount, blocked: true });
+        continue;
+      } else if (rt === null) {
+        amount = null; label = asMilk ? '補牛奶' : '補飲料';
+        notes.push('冰沙、冰淇淋類飲品不適用補牛奶／補飲料，請以門市為準。');
+      } else if (asMilk && f.tag === 'addmilk' && !iceLess) {
         amount = null; label = '加牛奶';
         notes.push('圖表的「補奶類 +$15」是給少冰／去冰的飲品；正常冰想加牛奶，圖表沒有寫，請以門市為準。');
+      } else if (asMilk) {
+        label = milky ? `補${milkWord}（補奶類）` : '補牛奶（補奶類）';
+        if (!milky) notes.push(`${d.n}本身不含奶；補牛奶圖表同樣收 $15，能否這樣調整請以門市為準。`);
       } else {
-        label = milky ? `補奶類（補${MILK_NAME[d.m]}）` : '補奶類（補牛奶）';
-        if (!milky) notes.push(`${d.n}本身不含奶，一般補的是飲料（${d.fill || '飲料'}）；要改補牛奶，圖表同樣收 $15。`);
+        label = `補${d.fill || '飲料'}（補飲料）`;
+        if (rt === 'ask') notes.push('這款能不能補飲料，請以門市為準。');
+        if (rt === 'milk') notes.push(`這杯有奶，一般是補${milkWord}；補飲料同樣 $15。`);
       }
-    } else if (it.id === 'ice_drink') {
-      label = `補飲料（補${d.fill || '飲料'}）`;
-      if (d.t === 'hot') { amount = null; notes.push('補飲料是給少冰／去冰的冰飲。'); }
+      lines.push({ id: lineId, label, amount });
+      continue;
     } else if (it.group === 'milk') {
       if (!milky) {
         amount = null;
@@ -418,11 +436,22 @@ export function buildOrder(norm) {
     extraRegions.push('sweet_btn');
   }
 
-  if (iceLess && !refill && d.t !== 'hot' && !d.noice) {
-    tips.push(milky
-      ? `想把空間補滿：這杯有奶，選「補奶類（補${MILK_NAME[d.m]}）」+$15。`
-      : `想把空間補滿：這杯不含奶，選「補飲料（補${d.fill || '飲料'}）」+$15，不會用到補奶類。`);
-    extraRegions.push(milky ? 'ice_milk' : 'ice_drink', 'ice_note2');
+  // 只說少冰／去冰、沒說要補：不算錢，但立刻反問要不要補
+  let ask = null;
+  if (iceLess && !refill && !d.noice) {
+    if (rt === 'milk') {
+      ask = { add: `補${milkWord}`, q: `需要補${milkWord}嗎？`, yes: `要補${milkWord}`,
+        sub: `補${milkWord} +$15；只${iceWord}、沒有要補，就不加價。` };
+      extraRegions.push('ice_milk', 'ice_note2');
+    } else if (rt === 'tea') {
+      ask = { add: `補${d.fill || '茶'}`, q: `需要補${d.fill || '茶'}嗎？`, yes: `要補${d.fill || '茶'}`,
+        sub: `補${d.fill || '茶'}（補飲料）+$15；只${iceWord}、沒有要補，就不加價。這杯不含奶，不會補牛奶。` };
+      extraRegions.push('ice_drink', 'ice_note2');
+    } else if (rt === 'nocb') {
+      tips.push(`冷萃類飲品不能補，只${iceWord}不加價。`);
+    } else if (rt === 'ask') {
+      tips.push(`這杯${milky ? '' : '不含奶，'}只${iceWord}不加價；能不能補飲料請以門市為準（補飲料 +$15）。`);
+    }
   }
 
   if (eco) {
@@ -431,7 +460,7 @@ export function buildOrder(norm) {
       : { id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
   }
 
-  if (lines.some(l => l.amount == null)) notes.push('標示「未列價」的項目沒有算進合計。');
+  if (lines.some(l => l.amount == null && !l.blocked)) notes.push('標示「未列價」的項目沒有算進合計。');
 
   let basePrice = null;
   if (sizeIdx != null) {
@@ -455,7 +484,7 @@ export function buildOrder(norm) {
     drink: d,
     tempKnown: pk.tempKnown,
     sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
-    basePrice, lines, addTotal, sizeTotals, notes, tips,
+    basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord,
     regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
     topics: topicIds,
     fixed,
@@ -465,11 +494,14 @@ export function buildOrder(norm) {
 
 function explainOrder(o) {
   const s = o.summary;
-  const head = s.hasMilk
-    ? `${s.name}是有奶的飲品（${s.comp}），所以少冰／去冰想補滿，補的是奶類。`
-    : `${s.name}不含奶（${s.comp}），所以少冰／去冰想補滿，補的是飲料本身，不是牛奶。`;
-  const rows = o.lines.map(l => `- ${l.label}：${l.amount == null ? '圖表沒有列價格' : l.amount === 0 ? '不用加錢' : `多付 ${money(l.amount).replace('+', '')}`}`);
-  return [head, ...rows, ...o.tips].join('\n');
+  const rt = refillType(o.drink);
+  const head = rt === 'nocb'
+    ? `${s.name}是冷萃類飲品（${s.comp}），不能補；只${o.iceWord}不加價。`
+    : s.hasMilk
+      ? `${s.name}是有奶的飲品（${s.comp}），所以少冰／去冰想補滿，補的是牛奶（補奶類）。`
+      : `${s.name}不含奶（${s.comp}），所以少冰／去冰想補滿，補的是飲料本身，不是牛奶。`;
+  const rows = o.lines.map(l => `- ${l.label}：${l.blocked ? '不能補' : l.amount == null ? '圖表沒有列價格' : l.amount === 0 ? '不用加錢' : `多付 ${money(l.amount).replace('+', '')}`}`);
+  return [head, ...rows, ...o.tips, ...(o.ask ? [`${o.ask.q}${o.ask.sub}`] : [])].join('\n');
 }
 
 export function orderToText(o) {
@@ -478,11 +510,12 @@ export function orderToText(o) {
   }
   const s = o.summary;
   const out = [`${s.name}：${s.milk}｜${s.comp}`, `價格：${s.prices}`];
-  o.lines.forEach(l => out.push(`- ${l.label} ${l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount)}`));
+  o.lines.forEach(l => out.push(`- ${l.label} ${l.blocked ? '不能補' : l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount)}`));
   if (o.lines.length) out.push(`加價合計 ${money(o.addTotal)}`);
   if (o.basePrice != null) out.push(`**合計（${o.sizeLabel}）：$${o.basePrice + o.addTotal}**`);
   else if (o.lines.length) out.push(`含飲品：${o.sizeTotals.map(t => `${t.label} $${t.total}`).join('／')}`);
   o.tips.forEach(t => out.push(t));
+  if (o.ask) out.push(`**${o.ask.q}**${o.ask.sub}`);
   o.notes.forEach(n => out.push(`⚠️ ${n}`));
   return out.join('\n');
 }
@@ -504,7 +537,7 @@ export function wantsImage(norm) {
 // 主流程：能用關鍵字回答就回答；回 null 代表交給 AI
 // ---------------------------------------------------------------
 export function localReply(input, state = {}) {
-  const norm = normalize(input);
+  let norm = normalize(input);
   if (!norm) return null;
 
   const topics = matchTopics(norm);
@@ -603,6 +636,26 @@ export function localReply(input, state = {}) {
     return null;
   }
 
+  // 剛反問「需要補牛奶嗎？」：處理「要／不用」這類簡短回答
+  if (state.pending && state.lastOrder) {
+    const short = norm.replace(/[。!！~～,，.]+$/g, '');
+    if (/^(要|好|需要|要的|好的|可以|對|是|嗯|麻煩|ok|yes)(喔|啊|呀|唷|欸|哦)?$/.test(short)) {
+      norm = state.lastOrder + state.pending.add;
+    } else if (/^(不用|不要|不需要|不補|免|沒關係|不必|不了|no)(補)?(了|喔|啦|囉|唷)?$/.test(short)) {
+      const o = buildOrder(state.lastOrder);
+      if (o && o.kind === 'drink') {
+        o.ask = null;
+        o.tips = [`好的，不補。只${o.iceWord}不加價。`];
+        return {
+          source: 'local', text: orderToText(o), order: o, orderText: state.lastOrder,
+          topics: o.topics.length ? o.topics : ['ice'], itemRegions: o.regions,
+          chips: [o.sizeIdx == null ? '大杯呢？' : null, '用環保杯呢？', '哪些飲料有牛奶？'].filter(Boolean),
+          pending: null,
+        };
+      }
+    }
+  }
+
   // 有提到飲品：依那杯飲品回答（含不含奶、價格、加價）
   let order = buildOrder(norm);
   let orderText = order ? fixNames(norm) : null;
@@ -625,8 +678,8 @@ export function localReply(input, state = {}) {
         chips: ['哪些飲料有牛奶？', ...order.drinks.slice(0, 2).map(x => `${x.name.replace(/（.*$/, '')}去冰補滿多少？`)],
       };
     }
-    const base = order.summary.name.replace(/（.*$/, '');
     const chips = [];
+    if (order.ask) chips.push(order.ask.yes, '不用補');
     if (order.regions.length) chips.push('看不懂，標給我看');
     if (order.sizeIdx == null) chips.push('大杯呢？');
     if (!order.lines.some(l => l.id === 'eco')) chips.push('用環保杯呢？');
@@ -638,8 +691,9 @@ export function localReply(input, state = {}) {
       orderText,
       topics: order.topics.length ? order.topics : ['milk_list'],
       itemRegions: order.regions,
-      chips: chips.slice(0, 3),
+      chips: chips.slice(0, order.ask ? 4 : 3),
       markable: !!order.regions.length,
+      pending: order.ask ? { add: order.ask.add } : null,
     };
   }
 
