@@ -199,6 +199,16 @@ mark.price {
 }
 .ask-q { font-size: 16.5px; font-weight: 700; }
 .ask-sub { margin-top: 2px !important; font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+.ask-actions { display: flex; gap: 8px; margin-top: 10px !important; }
+.ask-btn {
+  flex: 1; min-height: 44px; padding: 8px 10px;
+  border: 1.5px solid var(--marker-solid); border-radius: 10px;
+  background: var(--paper); color: var(--ink);
+  font-size: 15.5px; font-weight: 700;
+}
+.ask-btn[data-choice="yes"][aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #FFFDF9; }
+.ask-btn[data-choice="no"][aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); }
+.ask-btn:active { transform: translateY(1px); }
 
 /* 標示圖片 */
 figure.shot { margin: 0.75em 0 0; }
