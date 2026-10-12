@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122013';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122013';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122013';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122014';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122014';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122014';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -155,7 +155,8 @@ function renderOrder(o, opts = {}) {
         </div>
       </div>`;
   }
-  html += o.notes.map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
+  html += o.notes.filter(n => !(o.aiNote && /沒看懂/.test(n))).map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
+  if (o.aiNote) html += `<p class="note">AI 補充：${esc(o.aiNote)}</p>`;
   return html;
 }
 
@@ -284,6 +285,7 @@ function setupCard(row, firstOrder, baseText) {
     const ask = base?.ask || null;
     const o = choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
     if (o && firstOrder.aiSaid) o.aiSaid = firstOrder.aiSaid;
+    if (o && firstOrder.aiNote) o.aiNote = firstOrder.aiNote;
     return { text: choice === 'yes' && ask ? text + ask.add : text, o, ask };
   };
 
@@ -397,7 +399,7 @@ async function send(text) {
       }
       if (local) {
         const note = !ord ? cleanAiText(ai.reply) : '';
-        if (note && local.order?.kind === 'drink') local.order.notes = [...local.order.notes.filter(n => !/沒看懂/.test(n)), `AI 補充：${note}`];
+        if (note && local.order?.kind === 'drink') local.order.aiNote = note;
         botReply(local, text);
         return;
       }
