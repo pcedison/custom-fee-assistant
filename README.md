@@ -52,46 +52,35 @@ git push origin main && git push -f origin gh-pages
 
 ## 部署到 Cloudflare Pages（含 AI）
 
-> Cloudflare 後台的「拖曳上傳」不會編譯 `functions/` 資料夾，AI 功能會失效。請用下面兩種方式之一。
+`wrangler.toml` 已設定好輸出目錄 `public` 和 Workers AI 綁定，連結 GitHub 後會自動套用。
 
-### 方式 A：連動 GitHub（推薦）
+1. Cloudflare 後台 → Workers & Pages → 建立 → Pages → 匯入 Git 存放庫，選 `custom-fee-assistant`。
+2. 框架預設選「無」，建置指令留空，按「儲存並部署」。
+3. 部署完成後打開 `https://<專案>.pages.dev/api/chat`，看到 `"providers":["workers-ai"]` 就代表 AI 已接上。
 
-1. 把整個資料夾推到 GitHub。
-2. Cloudflare 後台 → Workers & Pages → 建立 → Pages → 連接 Git，選這個 repo。
-3. 建置設定：
-   - 框架預設：無
-   - 建置指令：留空
-   - 建置輸出目錄：`public`
-4. 設定 → 變數和祕密 → 新增 `OPENROUTER_API_KEY`，類型選「祕密」（Production 與 Preview 都要設）。
-5. 重新部署一次，讓環境變數生效。
+之後推送到 `main`，Cloudflare 會自動重新部署。
 
-### 方式 B：Wrangler 指令
+### AI 怎麼用
 
-```bash
-npx wrangler login
-npx wrangler pages project create custom-fee-assistant
-npx wrangler pages secret put OPENROUTER_API_KEY --project-name custom-fee-assistant
-npx wrangler pages deploy public --project-name custom-fee-assistant
-```
+- 規則看得懂的問題（大部分點單與收費問題）在瀏覽器直接回答，不呼叫 AI、不花額度。
+- 規則答不了、或點單裡有看不懂的詞時，才交給 AI。
+- AI 遇到點單時只負責「聽懂」，把口語改寫成標準點單（例如「大杯冰的抹茶拿鐵冰塊少一點加一份咖啡」→「冰醇濃抹茶那堤 大杯 少冰 加一份濃縮」），金額一律由收費規則計算，卡片會標示「AI 判讀為：…」。
 
-在專案根目錄執行，Wrangler 會自動把 `functions/` 一起部署。
+### AI 供應商（依序嘗試，前一個失敗才換下一個）
 
-### 部署後檢查
+| 順序 | 供應商 | 設定 | 說明 |
+| --- | --- | --- | --- |
+| 1 | Cloudflare Workers AI | `wrangler.toml` 的 `[ai]`，免金鑰 | 每天 10,000 Neurons 免費；預設模型 `@cf/qwen/qwen3-30b-a3b-fp8` |
+| 2 | Google Gemini | 祕密 `GEMINI_API_KEY`（選填） | 免費層模型如 `gemini-3.5-flash-lite`，額度以 AI Studio 顯示為準；免費層資料會被用於改進產品 |
+| 3 | OpenRouter | 祕密 `OPENROUTER_API_KEY`（選填） | 目前免費模型很少，每天 50 次（儲值 10 美元後 1,000 次） |
 
-打開 `https://你的網址/api/chat`，看到 `"ai": true` 就代表金鑰已設定。
+換模型：改 `wrangler.toml` 的 `WORKERS_AI_MODEL` 後推送。可用模型與價格見 Cloudflare Workers AI 的定價頁。
 
-## 環境變數
+### 用量與費用
 
-| 名稱 | 必填 | 說明 |
-| --- | --- | --- |
-| `OPENROUTER_API_KEY` | 是 | OpenRouter API 金鑰（https://openrouter.ai/keys），請設為祕密 |
-| `OPENROUTER_MODEL` | 否 | 預設 `openrouter/free`，會自動挑一個可用的免費模型；也可指定如 `xxx/yyy:free` |
-| `OPENROUTER_FALLBACKS` | 否 | 備援模型，逗號分隔，主模型失敗時依序嘗試 |
-| `ALLOWED_ORIGINS` | 否 | 允許呼叫 `/api/chat` 的其他網域，逗號分隔；預設只允許自己的網域 |
-
-### OpenRouter 免費額度
-
-免費模型的額度是以整個 OpenRouter 帳號計算：每分鐘 20 次；從未儲值的帳號每天 50 次，累計儲值滿 10 美元後提高到每天 1000 次（儲值金額不會被免費模型扣掉）。門市使用建議先儲值 10 美元。額度用完時，聊天室會提示顧客改點常見問題，關鍵字回答不受影響。
+- Workers Free 方案：每天 10,000 Neurons 用完就停（AI 補位暫停，規則回答照常），不會產生費用。
+- 改用 Workers Paid（每月 5 美元）：超過免費額度後每 1,000 Neurons 0.011 美元。
+- 大量推廣時，建議在 Cloudflare WAF 為 `/api/chat` 設定速率限制（例如每個 IP 每分鐘 10 次）。
 
 ## 修改內容
 
