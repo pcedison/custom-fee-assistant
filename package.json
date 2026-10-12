@@ -1,0 +1,10 @@
+{
+  "name": "custom-fee-assistant",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx wrangler pages dev public",
+    "deploy": "npx wrangler pages deploy public",
+    "test": "node tests/engine.test.mjs"
+  }
+}

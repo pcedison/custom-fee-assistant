@@ -1,0 +1,4 @@
+# 本機測試用：複製成 .dev.vars 並填入金鑰（.dev.vars 不要上傳到 Git）
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxxxxx
+# OPENROUTER_MODEL=openrouter/free
+# OPENROUTER_FALLBACKS=
