@@ -84,7 +84,7 @@ function startsWithItem(rest) {
   return ALL_NAMES.some(n => rest.startsWith(n));
 }
 
-export function extractItems(norm) {
+export function extractItems(norm, out) {
   let work = stripDrinks(norm);
   const found = new Map();
   for (const { n, add, verbOnly, tag, it } of ITEM_NAMES) {
@@ -117,6 +117,7 @@ export function extractItems(norm) {
       idx = work.indexOf(n, idx + n.length);
     }
   }
+  if (out) out.rest = work;
   // 有指定口味就不再重複計算「未指定口味」
   if ([...found.keys()].some(id => id === 'pro_vanilla' || id === 'pro_cocoa')) found.delete('pro_any');
   if ([...found.values()].some(f => f.item.group === 'syrup' && f.item.id !== 'syrup_any')) found.delete('syrup_any');
@@ -319,6 +320,23 @@ function drinkSummary(pk) {
   };
 }
 
+// 把認得的部分（加料、杯型、甜度、環保杯、口語）拿掉後，剩下的就是看不懂的詞
+const RE_FILLER = new RegExp([
+  RE_SIZE.source,
+  '(?:\\d+|[一二兩三四五六七八九十半]+)(?:份|個|次|種|匙|下|杯|shot)',
+  '(?:糖漿|糖)?(?:\\d|[一二兩三四五六七八九十半])下(?:糖漿|糖)?|半糖|微糖|少糖|減糖|無糖|去糖|不要糖|不加糖|少甜|微甜|無甜',
+  '環保杯|自備杯|自帶杯|隨行杯|自備容器|保溫杯|自己的杯|帶杯|環保|買一送一|買1送1|一送一|1送1|好友分享',
+  '正常冰|正常甜|正常|冰的|熱的|溫的|多冰',
+  '請問|我要|我想|想要|幫我|麻煩|多少錢|多少|價錢|價格|總共|一共|合計|試算|算一下|有奶嗎|有牛奶嗎|有沒有奶|含奶|會怎樣|可以嗎|可以|怎麼算',
+  '不要|不用|沒有|沒帶|要|請|的|嗎|呢|吧|啊|喔|跟|和|還有|然後|另外|加上|再|換成|換|加|改|升級|多|點|杯|冰|熱|溫',
+].map(x => `(?:${x})`).join('|'), 'g');
+function leftoverWords(rest) {
+  return rest
+    .replace(RE_FILLER, ' ')
+    .split(/[^\p{Script=Han}a-z0-9]+/u)
+    .filter(w => w.length >= 2);
+}
+
 export function buildOrder(norm) {
   const fixed = fixNames(norm);
   const hits = findDrinks(fixed);
@@ -334,7 +352,9 @@ export function buildOrder(norm) {
   let itemsText = fixed;
   for (const h of hits) itemsText = itemsText.slice(0, h.idx) + blank(itemsText.slice(h.idx, h.idx + h.len)) + itemsText.slice(h.idx + h.len);
 
-  const items = extractItems(itemsText);
+  const ex0 = {};
+  const items = extractItems(itemsText, ex0);
+  const unknown = leftoverWords(ex0.rest || '');
   const eco = detectEco(itemsText);
   const bogo = detectBogo(itemsText);
   const sm = itemsText.match(RE_SIZE);
@@ -352,6 +372,7 @@ export function buildOrder(norm) {
   const tips = [];
   const extraRegions = [];
 
+  if (unknown.length) notes.push(`有一段我沒看懂：「${unknown.join('」「')}」。可以換個說法，例如「升級特選」「加一份濃縮」「換燕麥奶」。`);
   if (d.nocustom && (items.length || sweet)) notes.push('官網註明：這款不提供客製化調整。');
 
   // ---- 濃縮咖啡：先看這杯本身有沒有濃縮 ----

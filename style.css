@@ -168,7 +168,7 @@ mark.price {
 /* 飲品卡片 */
 .drink-list { list-style: none; padding: 0 !important; margin: 0; display: grid; gap: 10px; }
 .drink-card { padding: 0 0 10px; border-bottom: 1px dashed var(--line); }
-.drink-list .drink-card:last-child { border-bottom: 0; padding-bottom: 0; }
+.drink-list .drink-card:last-child, .bubble > .drink-card:last-child { border-bottom: 0; padding-bottom: 0; }
 .drink-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .drink-name { font-size: 17px; font-weight: 700; line-height: 1.35; }
 .milk-tag {

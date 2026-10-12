@@ -85,7 +85,9 @@ export const ITEMS = [
   { id: 'esp_decaf', label: '低咖啡因', price: 0, group: 'esp', regions: ['esp_decaf'],
     names: ['低咖啡因', '無咖啡因', '低因', 'decaf'] },
   { id: 'esp_upgrade', label: '升級特選濃縮咖啡', price: 15, perServing: true, group: 'esp', regions: ['esp_upgrade'],
-    names: ['升級特選濃縮咖啡', '特選濃縮咖啡', '升級特選濃縮', '特選濃縮', '升級特選', { n: '特選', add: true }] },
+    names: ['升級特選濃縮咖啡', '升級精選濃縮咖啡', '特選濃縮咖啡', '精選濃縮咖啡', '升級特選濃縮', '升級精選濃縮',
+      '升級特選豆', '升級精選豆', '特選濃縮', '精選濃縮', '特選豆', '精選豆', '升級特選', '升級精選',
+      { n: '特選', add: true }, { n: '精選', add: true }] },
   { id: 'esp_extra', label: '多加一份濃縮咖啡', price: 15, perServing: true, group: 'esp', regions: ['esp_extra'],
     names: [{ n: '濃縮咖啡', add: true }, { n: '濃縮', add: true }, { n: 'espresso', add: true }, { n: 'shot', add: true }] },
 
