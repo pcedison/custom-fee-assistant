@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122042';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610122042';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122048';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610122048';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -990,10 +990,53 @@ function followChips(topics) {
 // ---------------------------------------------------------------
 // AI 回覆整理：拿掉思考內容、取出 [[HL:...]] 標示
 // ---------------------------------------------------------------
+// AI 提到的飲品 → 依官網資料產生卡片（價格不採用 AI 寫的數字）
+export function drinkRefs(names, aiText) {
+  const out = [];
+  const seen = new Set();
+  const add = d => { if (d && !seen.has(d.n)) { seen.add(d.n); out.push(d); } };
+  for (const raw of names) {
+    const n = normalize(fixNames(raw));
+    add(DRINKS.find(d => normalize(d.n) === n) || (BASES.get(baseName(n)) || [])[0]);
+  }
+  if (!out.length) {
+    let work = normalize(fixNames(aiText));
+    const keys = [
+      ...DRINKS.map(d => [normalize(d.n), d]),
+      ...[...BASES.entries()].map(([b, vs]) => [normalize(b), vs.find(v => v.t === 'iced') || vs[0]]),
+    ].filter(([k]) => k.length >= 3).sort((a, b) => b[0].length - a[0].length);
+    for (const [k, d] of keys) {
+      if (!work.includes(k)) continue;
+      add(d);
+      work = work.split(k).join(BLANK.repeat(k.length));
+    }
+  }
+  return out.slice(0, 4).map(d => {
+    const s = drinkSummary({ drink: d, alt: null, tempKnown: true });
+    return { name: s.name, milk: s.milk, hasMilk: s.hasMilk, prices: s.prices, text: d.n };
+  });
+}
+
+// 拿掉 AI 自己寫的飲品價格（加價金額 +$15、−$10 保留）
+function stripDrinkPrices(text) {
+  return text
+    .split('\n')
+    .filter(line => !/(價格|售價|原價)\s*[:：]/.test(line))
+    .join('\n')
+    .replace(/(短杯|中杯|大杯|特大杯)?\s*(?<![+＋−\-])\$\s?(\d{2,3})/g, (m, size, n) => (Number(n) >= 80 ? '' : m))
+    .replace(/[（(]\s*[）)]/g, '')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
 export function parseAiReply(raw) {
   let text = String(raw || '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/^[\s\S]*?<\/think>/i, '');
+  const drinkNames = [];
+  text = text.replace(/\[\[\s*DRINKS\s*[:：]\s*([^\]]*)\]\]/gi, (_, s) => {
+    drinkNames.push(...s.split(/[,，、]+/).map(x => x.trim()).filter(Boolean));
+    return '';
+  });
   const ids = [];
   text = text.replace(/\[\[\s*HL\s*[:：]\s*([^\]]*)\]\]/gi, (_, s) => {
     ids.push(...s.split(/[,，、\s]+/).map(x => x.trim()).filter(Boolean));
@@ -1003,5 +1046,7 @@ export function parseAiReply(raw) {
   const topicIds = ids.filter(id => TOPIC_BY_ID[id]);
   const regions = uniq(ids.flatMap(id => TOPIC_BY_ID[id]?.regions || (REGIONS[id] ? [id] : [])));
   const mentioned = matchTopics(normalize(text)).filter(t => !t.low).map(t => t.id);
-  return { text, regions, topics: uniq([...topicIds, ...mentioned]).slice(0, 3) };
+  const drinks = drinkRefs(drinkNames, text);
+  if (drinks.length) text = stripDrinkPrices(text).trim();
+  return { text, regions, topics: uniq([...topicIds, ...mentioned]).slice(0, 3), drinks };
 }
