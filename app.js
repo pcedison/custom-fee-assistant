@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122107';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122107';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122107';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122116';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122116';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122116';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -55,6 +55,8 @@ function renderText(text) {
   for (const raw of text.split('\n')) {
     const line = raw.trim();
     const m = line.match(/^[-•・*]\s+(.*)$/);
+    // 「- 這邊有幾款…推薦您：」這種引導句不當成項目
+    if (m && !list && /[：:]\s*$/.test(m[1])) { out.push(m[1]); continue; }
     if (m) {
       if (!list) { list = []; out.push(list); }
       list.push(m[1]);
@@ -266,12 +268,14 @@ async function attachImage(row, { regions, plain, caption }) {
 }
 
 const HEALTH_NOTE = '<p class="note">⚠️ 過敏或健康相關需求，請以門市與包裝標示為準；飲品製作過程可能接觸乳製品等過敏原。</p>';
+const ALLERGY_NOTE = '<p class="note">⚠️ 對牛奶過敏：點餐時請先告訴夥伴。奶油、冰淇淋也是乳製品；飲品製作過程可能接觸乳製品，請以門市與包裝標示為準。</p>';
+const healthNote = h => (h === 'allergy' ? ALLERGY_NOTE : HEALTH_NOTE);
 
 function botReply(r, userText) {
   let body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
   if (r.refs?.length) body += renderRefs(r.refs, r.refsTitle);
-  if (r.health) body += HEALTH_NOTE;
-  if (r.order && r.health) r.order.health = true;
+  if (r.health) body += healthNote(r.health);
+  if (r.order && r.health) r.order.health = r.health;
   const meta = r.meta || (r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆');
   const row = addMessage('bot', body, meta);
 
@@ -310,7 +314,7 @@ function setupCard(row, firstOrder, baseText) {
   const draw = () => {
     const { o, ask } = current();
     if (!o || o.kind !== 'drink') return;
-    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null }) + (firstOrder.health ? HEALTH_NOTE : '');
+    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null }) + (firstOrder.health ? healthNote(firstOrder.health) : '');
     bubble.querySelectorAll('.ice-btn').forEach(b => b.addEventListener('click', () => {
       if (ice === b.dataset.ice) return;
       ice = b.dataset.ice;
@@ -379,7 +383,7 @@ const RE_HEALTH = /(過敏|乳糖|孕婦|懷孕|咖啡因|熱量|卡路里|健�
 
 function dietReply(kind) {
   const fb = dietFallback(kind);
-  return { source: 'local', meta: '依官網成分整理', text: fb.text, refs: fb.refs, refsTitle: '不含奶的飲品', health: kind === 'allergy', topics: [], chips: WELCOME_CHIPS.slice(0, 3) };
+  return { source: 'local', meta: '依官網成分整理', text: fb.text, refs: fb.refs, refsTitle: '不含奶的飲品', health: kind === 'allergy' ? 'allergy' : false, topics: [], chips: WELCOME_CHIPS.slice(0, 3) };
 }
 
 // 規則有看不懂的詞時，先問 AI 能不能聽懂
@@ -424,7 +428,8 @@ async function send(text) {
       botReply(dietReply(diet.diet), text);
       return;
     }
-    if (local && diet.diet === 'allergy' && !diet.inherited) local.health = true;
+    const allergy = diet.diet === 'allergy' && !diet.inherited;
+    if (local && allergy) local.health = 'allergy';
     if (local && !needsAI(local) && !preferAI) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
@@ -439,7 +444,7 @@ async function send(text) {
       if (ord?.r && (!local || !hasUnknown(ord.r.order))) {
         ord.r.order.aiSaid = ord.text;
         ord.r.meta = 'AI 判讀，金額依收費規則計算';
-        ord.r.health = diet.diet === 'allergy' || RE_HEALTH.test(normalize(text));
+        ord.r.health = allergy ? 'allergy' : RE_HEALTH.test(normalize(text));
         botReply(ord.r, text);
         return;
       }
@@ -455,7 +460,7 @@ async function send(text) {
       }
       const p = parseAiReply(ai.reply.replace(/^.*ORDER\s*[:：].*$/gim, ''));
       const onTopic = matchTopics(normalize(text)).some(t => !t.low);
-      const health = diet.diet === 'allergy' || RE_HEALTH.test(normalize(text));
+      const health = (allergy || (diet.diet === 'allergy' && dietAsk)) ? 'allergy' : RE_HEALTH.test(normalize(text));
       if (health || diet.diet) p.text = p.text.replace(/[，,]?\s*(您|你)?(都)?(可以|能)?(很)?(安心|放心)(地)?(飲用|喝|享用|選擇)?/g, '');
       // 不含奶／過敏的推薦：含奶的飲品一律不能出現，AI 答錯就換成依官網成分整理的答案
       const g = dietAsk ? guardDietReply(diet.diet, p, { inherited: diet.inherited }) : null;

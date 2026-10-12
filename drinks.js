@@ -227,8 +227,9 @@ export function dietFor(messages) {
   const users = (messages || []).filter(m => m && m.role === 'user').map(m => norm(m.content));
   const last = users[users.length - 1] || '';
   let diet = dietIntent(last);
-  // 短追問往前找最近三句裡提過的需求
-  const inherited = !diet && users.length > 1 && last.length <= 10;
+  // 追問（「那熱的呢」「還有嗎」「其他的」）才沿用最近三句裡提過的需求；「冷萃跟美式差在哪」這種新問題不算
+  const followUp = last.length <= 12 && (/^(那|那麼|還有|其他|別的|再|換|熱的|冰的)/.test(last) || /呢[?？]?$|還有嗎/.test(last));
+  const inherited = !diet && users.length > 1 && followUp;
   if (inherited) diet = users.slice(-4, -1).reverse().map(dietIntent).find(Boolean) || null;
   const recommend = !!diet && (inherited || RE_RECOMMEND.test(last) || /有沒有|還有|其他|別的/.test(last));
   return { diet, recommend, inherited: !!(inherited && diet) };
