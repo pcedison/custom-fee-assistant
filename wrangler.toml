@@ -1,7 +1,12 @@
-# Cloudflare Pages 設定（連結 GitHub 後自動套用）
+# Cloudflare Workers 設定（連結 GitHub 後，部署指令 npx wrangler deploy 會讀這個檔）
 name = "custom-fee-assistant"
-pages_build_output_dir = "./public"
+main = "src/worker.js"
 compatibility_date = "2026-09-01"
+
+# 網站本體（聊天介面、圖表）
+[assets]
+directory = "./public"
+binding = "ASSETS"
 
 # Cloudflare Workers AI：免金鑰，直接用帳號的免費額度（每天 10,000 Neurons）
 [ai]
@@ -11,3 +16,6 @@ binding = "AI"
 # 主要模型（便宜、中文能力好）；想換模型改這一行再推送即可
 WORKERS_AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
 GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+[observability]
+enabled = true

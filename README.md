@@ -31,7 +31,8 @@ public/              ← 網站本體（Cloudflare Pages 的輸出目錄）
   highlight.js       在圖上畫螢光筆
   menu.jpg           收費圖表
   _headers           安全性與快取標頭
-functions/api/chat.js  ← 串接 OpenRouter 的後端（API 金鑰只在這裡讀取）
+functions/api/chat.js  ← AI 後端（Workers AI／Gemini／OpenRouter，金鑰只在這裡讀取）
+src/worker.js          ← Cloudflare Workers 入口
 tests/engine.test.mjs  ← 規則測試（npm test）
 ```
 
@@ -50,13 +51,13 @@ git branch -f gh-pages $(git subtree split --prefix public)
 git push origin main && git push -f origin gh-pages
 ```
 
-## 部署到 Cloudflare Pages（含 AI）
+## 部署到 Cloudflare Workers（含 AI）
 
-`wrangler.toml` 已設定好輸出目錄 `public` 和 Workers AI 綁定，連結 GitHub 後會自動套用。
+`wrangler.toml` 已設定好：網站本體在 `public/`、入口程式 `src/worker.js`（`/api/chat` 交給 AI，其餘是靜態檔），並綁定 Workers AI。
 
-1. Cloudflare 後台 → Workers & Pages → 建立 → Pages → 匯入 Git 存放庫，選 `custom-fee-assistant`。
-2. 框架預設選「無」，建置指令留空，按「儲存並部署」。
-3. 部署完成後打開 `https://<專案>.pages.dev/api/chat`，看到 `"providers":["workers-ai"]` 就代表 AI 已接上。
+1. Cloudflare 後台 → Workers & Pages → 建立 → 連結 GitHub，選 `custom-fee-assistant`。
+2. 專案名稱維持 `custom-fee-assistant`（要和 `wrangler.toml` 的 `name` 一致），建置指令留空，部署指令 `npx wrangler deploy`，按 Deploy。
+3. 部署完成後打開 `https://custom-fee-assistant.<你的子網域>.workers.dev/api/chat`，看到 `"providers":["workers-ai"]` 就代表 AI 已接上。
 
 之後推送到 `main`，Cloudflare 會自動重新部署。
 
