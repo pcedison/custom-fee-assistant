@@ -28,7 +28,20 @@ functions/api/chat.js  ← 串接 OpenRouter 的後端（API 金鑰只在這裡�
 tests/engine.test.mjs  ← 規則測試（npm test）
 ```
 
-## 部署到 Cloudflare Pages
+## 部署到 GitHub Pages（不含 AI）
+
+`gh-pages` 分支就是 `public/` 的內容，推上去後網址為 `https://<帳號>.github.io/<repo 名稱>/`。
+GitHub Pages 只能放靜態檔案，無法保管 API 金鑰，所以在 `github.io` 上 AI 補位會自動關閉，其餘功能（關鍵字問答、加價試算、螢光筆標圖）照常運作。
+若之後要開啟 AI，把同一個 repo 接到 Cloudflare Pages（見下一節）即可。
+
+更新網站：
+
+```bash
+git subtree split --prefix public -b gh-pages
+git push -f origin gh-pages
+```
+
+## 部署到 Cloudflare Pages（含 AI）
 
 > Cloudflare 後台的「拖曳上傳」不會編譯 `functions/` 資料夾，AI 功能會失效。請用下面兩種方式之一。
 
