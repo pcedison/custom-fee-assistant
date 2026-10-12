@@ -32,6 +32,7 @@ const state = {
   lastItemRegions: [],
   lastWasQuote: false,
   lastOrder: null,
+  pending: null,
   busy: false,
   latestShot: null,
 };
@@ -71,7 +72,8 @@ function milkTag(s) {
   const cls = s.hasMilk ? 'milk-yes' : (/有奶油|冰淇淋/.test(s.milk) ? 'milk-part' : 'milk-no');
   return `<span class="milk-tag ${cls}">${esc(s.milk)}</span>`;
 }
-function amountCell(a) {
+function amountCell(a, blocked) {
+  if (blocked) return '<span class="amt unlisted">不能補</span>';
   if (a == null) return '<span class="amt unlisted">未列價</span>';
   if (a === 0) return '<span class="amt">不加價</span>';
   return `<span class="amt"><mark class="price">${money(a)}</mark></span>`;
@@ -96,7 +98,7 @@ function renderOrder(o) {
       ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
     </div>`;
   if (o.lines.length) {
-    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount)}</li>`).join('');
+    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount, l.blocked)}</li>`).join('');
     const total = o.basePrice != null
       ? `<p class="receipt-total"><span>合計（${esc(o.sizeLabel)}）</span><mark class="price">$${o.basePrice + o.addTotal}</mark></p>
          <p class="receipt-foot">飲品 $${o.basePrice}，加價 ${money(o.addTotal)}</p>`
@@ -113,6 +115,7 @@ function renderOrder(o) {
     html += `<p class="receipt-total solo"><span>${esc(o.sizeLabel)}</span><mark class="price">$${o.basePrice}</mark></p>`;
   }
   html += o.tips.map(t => `<p class="tip">${inline(t)}</p>`).join('');
+  if (o.ask) html += `<div class="ask"><p class="ask-q">${esc(o.ask.q)}</p><p class="ask-sub">${inline(o.ask.sub)}</p></div>`;
   html += o.notes.map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
   return html;
 }
@@ -218,6 +221,7 @@ function botReply(r, userText) {
   else if (r.plainImage) attachImage(row, { plain: true, caption: '點圖可以放大。' });
 
   if (r.orderText) state.lastOrder = r.orderText;
+  state.pending = r.pending || null;
   if (r.topics?.length) state.lastTopics = r.topics;
   if (r.topics?.length || r.itemRegions?.length) {
     state.lastItemRegions = r.itemRegions || [];
