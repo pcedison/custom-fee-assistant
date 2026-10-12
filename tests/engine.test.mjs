@@ -271,6 +271,10 @@ t('短追問沿用上一句的需求', () => {
   const r = dietFor([...u('我對牛奶過敏可以喝什麼'), { role: 'assistant', content: 'x' }, ...u('那熱的呢')]);
   assert.deepEqual(r, { diet: 'allergy', recommend: true, inherited: true });
 });
+t('新問題不沿用上一句的過敏需求', () => {
+  const r = dietFor([...u('我對牛奶過敏可以喝什麼'), { role: 'assistant', content: 'x' }, ...u('冷萃跟美式差在哪')]);
+  assert.equal(r.diet, null);
+});
 t('AI 推薦含奶飲品、自創無奶版本 → 換成固定答案', () => {
   const p = parseAiReply('推薦你：\n- 冰美式咖啡：清爽\n- 冰摩卡（無奶）：濃縮咖啡＋摩卡醬\n- 冰那堤：可以要求不加奶\n[[DRINKS:冰美式咖啡,冰摩卡,冰那堤]]');
   const g = guardDietReply('allergy', p);
@@ -294,7 +298,7 @@ t('只有一兩行含奶 → 拿掉那幾行（含編號項目底下的說明）
   assert.equal(g.status, 'repaired');
   assert.ok(!/紅茶那堤|口感溫和/.test(g.text));
   assert.ok(/美式咖啡/.test(g.text) && /英式紅茶/.test(g.text) && /清爽/.test(g.text));
-  assert.ok(g.text.includes('⚠️ 奶油、冰淇淋也是乳製品'));
+  assert.ok(g.text.includes('請不要用「不加奶」的方式點'));
   assert.deepEqual(g.refs.map(r => r.text), ['美式咖啡', '英式紅茶']);
 });
 t('「對牛奶過敏」是在說需求，不算含奶', () => assert.deepEqual(dietProblems('對牛奶過敏的話，可以選這幾杯：\n- 冷萃咖啡'), []));
@@ -318,6 +322,10 @@ t('「冷萃和美式都用濃縮咖啡」整句拿掉並補正確說法', () =>
   assert.ok(r.text.includes('不是用濃縮咖啡做的'));
   assert.ok(r.text.includes('加一份濃縮 +$15'));
   assert.ok(!/\n\s*\n/.test(r.text));
+});
+t('「熱美式加熱水，冰美式加冷水和冰塊」是對的，不拿掉', () => {
+  const ok = '美式咖啡是濃縮咖啡加水（熱美式加熱水，冰美式加冷水和冰塊）。';
+  assert.equal(fixFacts(ok), ok);
 });
 t('正確的說法不動', () => {
   const ok = '冷萃咖啡是用冷水浸泡萃取，不是濃縮咖啡。美式是濃縮咖啡加水。冷萃也可以升級特選，加濃縮 +$15。';

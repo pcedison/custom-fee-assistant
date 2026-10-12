@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122107';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122107';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122116';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122116';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -1026,7 +1026,8 @@ const FACT_FIXES = [
     fact: '冷萃咖啡是用冷水長時間浸泡咖啡粉萃取的，不是用濃縮咖啡做的；美式咖啡才是濃縮咖啡加水。',
   },
   {
-    wrong: x => /冰美式/.test(x) && /熱水/.test(x),
+    // 同一個子句裡「冰美式」配「熱水」才算錯（「熱美式加熱水，冰美式加冷水」是對的）
+    wrong: x => x.split(/[,，、;；()（）]/).some(c => /冰美式/.test(c) && /熱水/.test(c) && !/冷水/.test(c)),
     fact: '冰美式咖啡是濃縮咖啡加冷水和冰塊。',
   },
 ];
@@ -1150,7 +1151,7 @@ export function dietFallback(diet) {
     return names.length ? `- ${label}：${names.join('、')}` : '';
   }).filter(Boolean);
   const reminder = diet === 'allergy'
-    ? '⚠️ 奶油、冰淇淋也是乳製品；含奶的飲品請不要用「不加奶」的方式點，醬料、奶泡也可能有乳製品，請直接選不含奶的品項，點餐時也告訴夥伴你對牛奶過敏。'
+    ? '含奶的飲品請不要用「不加奶」的方式點，醬料、奶泡也可能有乳製品，請直接選不含奶的品項。'
       + (DRINKS.some(dairyUnsure) ? '「雲朵泡泡美式」官網沒有列出奶類，過敏的話請先向夥伴確認。' : '')
     : '名字有「那堤、歐蕾、瑪奇朵、摩卡、巧克力、卡布奇諾」和大部分星冰樂都含奶，想喝不含奶的請直接選不含奶的品項。';
   const text = [
