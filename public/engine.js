@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610121546';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610121546';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610121921';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610121921';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -329,7 +329,7 @@ function scoreKey(q, fixed, k, soft) {
   if (matched < 2) return null;
   const exact = chunks.length === 1 && matched === k.length;
   if (!exact && matched < 3) return null;
-  return { matched, cov: matched / k.length, exact, chunks, s: kept[0].s, e: kept[kept.length - 1].e, keyLen: k.length };
+  return { matched, cov: matched / k.length, exact, chunks, s: kept[0].s, e: kept[kept.length - 1].e, keyLen: k.length, key: k };
 }
 
 function rankCandidates(q, fixed, soft) {
@@ -357,12 +357,32 @@ export function findDrinks(fixed) {
     if (round > 0 && !(top.exact || top.cov >= 0.6)) break;
     const overlap = cands.slice(1).filter(c => c.s < top.e && c.e > top.s);
     const ties = top.exact ? [] : overlap.filter(c => c.matched === top.matched);
-    found.push({ ...top, idx: top.s, ties, alts: overlap });
+    const official = top.exact && OFFICIAL.has(top.key);
+    found.push({ ...top, idx: top.s, ties, alts: overlap, official });
     const qa = [...q];
     for (const c of top.chunks) for (let x = 0; x < c.len; x++) qa[c.qs + x] = BLANK;
     q = qa.join('');
   }
   return found.sort((a, b) => a.s - b.s);
+}
+
+// 官方品名（去掉冰／熱）：打完整品名就不再提供其他候選
+const OFFICIAL = new Set([...BASES.keys()].map(normalize));
+
+// 只打了部分名稱（例如「可可」「蛋白雲朵」）：列出所有名稱含這段字的飲品
+const RE_FEE_Q = /(加錢|要錢|收費|費用|多少錢|價錢|價格|漲價|多少|貴|免費|可以加|能加|加幾|怎麼算|規則|是什麼|什麼意思)/;
+export function searchDrinks(fixed) {
+  if (RE_FEE_Q.test(fixed)) return [];
+  const core = fixed.replace(/[\p{P}\s]/gu, '').replace(/^(我要|請問|給我|幫我|有沒有|有)/, '')
+    .replace(/(的飲料|飲料|系列|有哪些|哪些|呢|嗎|啊)$/g, '').replace(/^[冰熱溫]/, '');
+  if (core.length < 2 || core.length > 6) return [];
+  if (SOFT_NAMES.includes(core)) return [];
+  const hits = [];
+  for (const base of BASES.keys()) {
+    const keys = [base, ...(DRINK_ALIASES[base] || [])].map(normalize);
+    if (keys.some(k => k.includes(core))) hits.push(base);
+  }
+  return hits.map(base => ({ base, core, start: fixed.indexOf(core) }));
 }
 
 // 用某一杯取代模糊比對到的那段字，例如「巧克力可可碎片加…」→「經典巧克力，可可碎片加…」
@@ -432,7 +452,20 @@ function leftoverWords(rest) {
 export function buildOrder(norm) {
   const fixed = fixNames(norm);
   const hits = findDrinks(fixed);
-  if (!hits.length) return null;
+  if (!hits.length) {
+    const found = searchDrinks(fixed);
+    if (!found.length) return null;
+    if (found.length === 1) return buildOrder(fixed.replace(found[0].core, found[0].base));
+    const at = found[0].start;
+    return {
+      kind: 'choose',
+      said: found[0].core,
+      options: found.slice(0, 8).map(f => ({
+        ...drinkSummary(pickVariant(f.base, fixed, at)),
+        text: fixed.slice(0, at) + f.base + fixed.slice(at + f.core.length),
+      })),
+    };
+  }
   const picks = hits.map(h => ({ ...pickVariant(h.base, fixed, h.idx), hit: h }));
   if (picks.length > 1) {
     return { kind: 'multi', drinks: picks.slice(0, 4).map(drinkSummary) };
@@ -445,7 +478,7 @@ export function buildOrder(norm) {
     return {
       kind: 'choose',
       said,
-      options: [h0, ...h0.ties].slice(0, 4).map(c => ({
+      options: [h0, ...h0.ties].slice(0, 8).map(c => ({
         ...drinkSummary(pickVariant(c.base, fixed, c.s)),
         text: rewriteWith(fixed, c),
       })),
@@ -458,12 +491,30 @@ export function buildOrder(norm) {
   const itemsArr = [...fixed];
   for (const h of hits) for (const c of h.chunks) for (let x = 0; x < c.len; x++) itemsArr[c.qs + x] = BLANK;
   let itemsText = itemsArr.join('');
+  const alts = [];
+  if (!h0.official) {
+    const seen = new Set([h0.base]);
+    for (const c of h0.alts) {
+      if (seen.has(c.base)) continue;
+      seen.add(c.base);
+      alts.push({ base: c.base, text: rewriteWith(fixed, c), s: c.s });
+    }
+    // 名稱裡也有這段字的其他飲品（例如「美式」→ 雲朵泡泡美式咖啡）
+    for (const base of BASES.keys()) {
+      if (seen.has(base)) continue;
+      const keys = [base, ...(DRINK_ALIASES[base] || [])].map(normalize);
+      if (said.length >= 2 && keys.some(k => k.includes(said))) {
+        seen.add(base);
+        alts.push({ base, text: fixed.slice(0, h0.s) + base + fixed.slice(h0.e), s: h0.s });
+      }
+    }
+  }
   const match = {
     said,
-    fuzzy: !h0.exact,
-    alts: h0.exact ? [] : h0.alts.slice(0, 2).map(c => ({
-      name: drinkSummary(pickVariant(c.base, fixed, c.s)).name.replace(/（.*$/, ''),
-      text: rewriteWith(fixed, c),
+    fuzzy: !h0.exact || alts.length > 0,
+    alts: alts.slice(0, 4).map(a => ({
+      name: drinkSummary(pickVariant(a.base, fixed, a.s)).name.replace(/（.*$/, ''),
+      text: a.text,
     })),
   };
 

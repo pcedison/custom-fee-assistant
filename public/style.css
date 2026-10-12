@@ -194,6 +194,11 @@ mark.price {
 
 .guess { margin-top: 8px !important; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
 .guess p { margin: 0; }
+.guess {
+  padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--ink-2) 10%, var(--paper));
+}
+.guess-q { margin-top: 6px !important; font-weight: 700; color: var(--ink); }
 .guess-alts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .alt-btn, .choose-btn {
   border: 1px solid var(--line); background: var(--paper); color: var(--ink);
@@ -202,9 +207,12 @@ mark.price {
 .choose-q { font-size: 16.5px; font-weight: 700; }
 .choose-list { list-style: none; padding: 0 !important; margin: 8px 0 0; display: grid; gap: 8px; }
 .choose-list li { margin: 0; }
-.choose-btn { width: 100%; border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
-.choose-btn .drink-name { font-size: 16px; font-weight: 700; }
-.choose-btn .drink-prices { font-size: 13.5px; color: var(--ink-2); margin: 0 !important; }
+.choose-list { gap: 6px; }
+.choose-btn { width: 100%; border-radius: 12px; padding: 8px 12px; display: grid; gap: 2px; }
+.choose-btn .drink-row { gap: 4px 8px; }
+.choose-btn .drink-name { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
+.choose-btn .milk-tag { font-size: 12px; padding: 4px 8px; }
+.choose-btn .drink-prices { font-size: 13px; color: var(--ink-2); margin: 0 !important; }
 .ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
 .ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
 .ice-btn {

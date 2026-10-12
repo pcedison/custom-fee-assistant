@@ -175,6 +175,44 @@ t('常見別稱：冰黑糖拿鐵、桂花拿鐵', () => {
   assert.match(order('桂花拿鐵').summary.name, /^米香桂花那堤/);
 });
 
+console.log('模糊搜尋：只打部分名稱');
+t('「巧克力」→ 自動選經典巧克力，並提供「不是這杯？」巧克力可可碎片星冰樂', () => {
+  const o = order('巧克力');
+  assert.match(o.summary.name, /^經典巧克力/);
+  assert.ok(o.match.fuzzy);
+  assert.ok(o.match.alts.some(a => a.name === '巧克力可可碎片星冰樂'));
+});
+t('「可可」→ 列出名稱含可可的飲品', () => {
+  const o = order('可可');
+  assert.equal(o.kind, 'choose');
+  assert.ok(o.options.length >= 4);
+  assert.ok(o.options.some(x => /^可可瑪奇朵/.test(x.name)));
+  assert.ok(o.options.some(x => x.name === '巧克力可可碎片星冰樂'));
+});
+t('「蛋白雲朵那堤」→ 香草、可可兩款讓人選', () => assert.equal(order('蛋白雲朵那堤').options.length, 2));
+t('「美式」→ 美式咖啡，並提供其他名稱有美式的飲品', () => {
+  const o = order('美式');
+  assert.match(o.summary.name, /^美式咖啡/);
+  assert.ok(o.match.alts.some(a => /雲朵泡泡美式/.test(a.name)));
+});
+t('點候選後不會又跳回原本那杯', () => {
+  for (const q of ['巧克力', '美式', '冷萃', '奶茶', '巧克力可可碎片加一份特選濃縮加一下香草糖漿']) {
+    for (const a of order(q).match.alts) {
+      const o = order(a.text);
+      assert.ok(o && o.kind === 'drink' && o.summary.name.replace(/（.*$/, '') === a.name, `${q} → ${a.name} 得到 ${o && o.summary?.name}`);
+    }
+  }
+});
+t('「星冰樂」→ 列出全部星冰樂', () => assert.ok(order('星冰樂').options.length >= 8));
+t('打完整品名不出現候選', () => {
+  assert.equal(order('經典巧克力').match.fuzzy, false);
+  assert.equal(order('冰那堤').match.fuzzy, false);
+});
+t('收費問題不會被當成搜尋', () => {
+  assert.equal(order('可可碎片要加錢嗎'), null);
+  assert.equal(order('咖啡要加錢嗎'), null);
+});
+
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {
   const r = reply('補飲料是什麼意思？');
