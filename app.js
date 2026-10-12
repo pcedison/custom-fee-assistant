@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610121921';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610121921';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610121921';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122013';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122013';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122013';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -100,6 +100,7 @@ function renderOrder(o, opts = {}) {
   }
   const s = o.summary;
   let html = `
+    ${o.aiSaid ? `<p class="ai-said">AI 判讀為：${esc(o.aiSaid)}</p>` : ''}
     <div class="drink-card">
       <div class="drink-row"><p class="drink-name">${esc(s.name)}</p>${milkTag(s)}</div>
       <p class="drink-comp">${esc(s.comp)}</p>
@@ -252,7 +253,7 @@ async function attachImage(row, { regions, plain, caption }) {
 
 function botReply(r, userText) {
   const body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
-  const meta = r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆';
+  const meta = r.meta || (r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆');
   const row = addMessage('bot', body, meta);
 
   if (r.regions?.length) attachImage(row, { regions: r.regions, caption: r.caption });
@@ -282,6 +283,7 @@ function setupCard(row, firstOrder, baseText) {
     const base = buildOrder(text);
     const ask = base?.ask || null;
     const o = choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
+    if (o && firstOrder.aiSaid) o.aiSaid = firstOrder.aiSaid;
     return { text: choice === 'yes' && ask ? text + ask.add : text, o, ask };
   };
 
@@ -345,6 +347,22 @@ const AI_ERRORS = {
   missing_key: '這題不在收費規則裡，而 AI 目前沒有連線。可以換個說法，或點下面的常見問題。',
 };
 
+// 規則有看不懂的詞時，先問 AI 能不能聽懂
+const hasUnknown = o => !!o?.notes?.some(n => /沒看懂/.test(n));
+function needsAI(local) {
+  return !!(API_URL && local?.order?.kind === 'drink' && hasUnknown(local.order));
+}
+function cleanAiText(reply) {
+  return parseAiReply(reply).text.replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 160);
+}
+function aiOrder(reply) {
+  const m = String(reply).match(/ORDER\s*[:：]\s*(.+)/i);
+  if (!m) return null;
+  const text = m[1].replace(/[`*「」]/g, '').trim();
+  const r = localReply(text, {});
+  return { text, r: r?.order?.kind === 'drink' ? r : null };
+}
+
 // ---------- 送出 ----------
 async function send(text) {
   text = (text || '').trim();
@@ -360,7 +378,7 @@ async function send(text) {
 
   try {
     const local = localReply(text, state);
-    if (local) {
+    if (local && !needsAI(local)) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
       botReply(local, text);
@@ -369,7 +387,25 @@ async function send(text) {
     const ai = await askAI();
     hideTyping();
     if (ai.reply) {
-      const p = parseAiReply(ai.reply);
+      // AI 把口語點單改寫成標準點單 → 交給收費規則計算，金額不由 AI 決定
+      const ord = aiOrder(ai.reply);
+      if (ord?.r && (!local || !hasUnknown(ord.r.order))) {
+        ord.r.order.aiSaid = ord.text;
+        ord.r.meta = 'AI 判讀，金額依收費規則計算';
+        botReply(ord.r, text);
+        return;
+      }
+      if (local) {
+        const note = !ord ? cleanAiText(ai.reply) : '';
+        if (note && local.order?.kind === 'drink') local.order.notes = [...local.order.notes.filter(n => !/沒看懂/.test(n)), `AI 補充：${note}`];
+        botReply(local, text);
+        return;
+      }
+      if (ord && !ord.r) {
+        botReply({ source: 'ai', text: `我判讀成「${ord.text}」，但對不到菜單上的飲品，可以換個說法或打飲品名稱的關鍵字。`, topics: [], chips: WELCOME_CHIPS.slice(0, 3) }, text);
+        return;
+      }
+      const p = parseAiReply(ai.reply.replace(/^.*ORDER\s*[:：].*$/gim, ''));
       const onTopic = matchTopics(normalize(text)).some(t => !t.low);
       botReply({
         source: 'ai',
@@ -380,6 +416,7 @@ async function send(text) {
         chips: onTopic && p.topics.length ? [MARK_CHIP, ...WELCOME_CHIPS.slice(0, 2)] : WELCOME_CHIPS.slice(0, 3),
       }, text);
     } else {
+      if (local) { botReply(local, text); return; }
       const msg = AI_ERRORS[ai.error] || 'AI 暫時無法回覆，請稍後再試，或點下面的常見問題。';
       addMessage('bot', renderText(msg), '系統訊息');
       state.history.pop();
