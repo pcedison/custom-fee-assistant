@@ -4,6 +4,8 @@
 // 以及最下方 buildSystemPrompt() 給 AI 的規則說明。
 // =============================================================
 
+import { DRINKS, MILK_LABEL } from './drinks.js';
+
 export const EFFECTIVE_DATE = '2026/10/12';
 export const ECO_CUP_DISCOUNT = 10;
 
@@ -72,7 +74,8 @@ export const ITEMS = [
   { id: 'ice_less', label: '少冰／去冰', price: 0, group: 'ice', regions: ['ice_less'],
     names: ['少冰', '去冰', '微冰', '不要冰', '無冰'] },
   { id: 'ice_milk', label: '補奶類', price: 15, group: 'ice', regions: ['ice_milk', 'ice_note2'],
-    names: ['補奶類', '補牛奶', '補奶', '奶補滿', '補滿奶', '加滿奶', '牛奶補滿', '奶加滿'] },
+    names: ['補奶類', '補牛奶', '補鮮奶', '補奶', '奶補滿', '補滿奶', '加滿奶', '牛奶補滿', '奶加滿',
+      { n: '加牛奶', tag: 'addmilk' }, { n: '加鮮奶', tag: 'addmilk' }, { n: '多加牛奶', tag: 'addmilk' }, { n: '加奶', tag: 'addmilk' }] },
   { id: 'ice_drink', label: '補飲料', price: 15, group: 'ice', regions: ['ice_drink', 'ice_note2'],
     names: ['補飲料', '飲料補滿', '補滿飲料', '補茶', '補咖啡', '補滿'] },
 
@@ -99,7 +102,7 @@ export const ITEMS = [
   { id: 'syrup_saltcar', label: '鹹焦糖糖漿', price: 15, limitOne: true, group: 'syrup', regions: ['syrup_saltcar', 'syrup_note'],
     names: ['鹹焦糖糖漿', '鹹焦糖'] },
   { id: 'syrup_cane', label: '蔗糖糖漿', price: 15, limitOne: true, group: 'syrup', regions: ['syrup_cane', 'syrup_note'],
-    names: ['蔗糖糖漿', '蔗糖', { n: '糖', add: true }] },
+    names: ['蔗糖糖漿', '蔗糖', { n: '糖', add: true, verb: true }] },
   { id: 'syrup_vanilla', label: '香草糖漿', price: 15, limitOne: true, group: 'syrup', regions: ['syrup_vanilla', 'syrup_note'],
     names: ['香草糖漿', { n: '香草', add: true }] },
   { id: 'syrup_hazel', label: '榛果糖漿', price: 15, limitOne: true, group: 'syrup', regions: ['syrup_hazel', 'syrup_note'],
@@ -113,7 +116,7 @@ export const ITEMS = [
 
   // 其他（每杯每項限一份）
   { id: 'o_matcha', label: '抹茶液', price: 15, limitOne: true, group: 'other', regions: ['o_matcha', 'other_note'],
-    names: ['抹茶液', { n: '抹茶', add: true }] },
+    names: ['抹茶液', { n: '抹茶粉', add: true, tag: 'powder' }, { n: '抹茶', add: true }] },
   { id: 'o_cream', label: '鮮奶油', price: 15, limitOne: true, group: 'other', regions: ['o_cream', 'other_note'], names: ['鮮奶油'] },
   { id: 'o_cocoa', label: '可可碎片', price: 15, limitOne: true, group: 'other', regions: ['o_cocoa', 'other_note'], names: ['可可碎片', '可可碎'] },
   { id: 'o_hojicha', label: '福吉茶粉', price: 15, limitOne: true, group: 'other', regions: ['o_hojicha', 'other_note'],
@@ -310,6 +313,27 @@ export const TOPICS = [
     follow: ['換燕麥奶多少？', '有哪些新收費？'],
   },
   {
+    id: 'milk_list',
+    title: '哪些飲品有奶',
+    keywords: ['哪些飲料有牛奶', '哪些有牛奶', '哪些有奶', '哪些含奶', '哪些沒有奶', '哪些沒有牛奶', '哪些不含奶', '有牛奶的', '沒有牛奶', '不含奶', '含奶', '有奶嗎', '有牛奶嗎', '牛奶嗎', '補奶還是補飲料', '補奶或補飲料', '有沒有奶', '有沒有牛奶'],
+    answer:
+`少冰／去冰想補滿：**有奶的補奶類、沒奶的補飲料**，都是 **+$15**。
+**不含奶**（補飲料）：
+- 咖啡：美式、每日精選、雲朵泡泡美式（3 款）
+- 冷萃：冷萃、檸檬、香檸蜜柚、夏日冰柚、紅心芭樂冷萃，氮氣冷萃
+- 茶：冰搖紅茶、冰搖檸檬紅茶、冰搖檸檬果茶、蜜柚檸檬果茶、蜜柚紅茶、阿里山烏龍、阿里山蜜柚烏龍青茶、英式紅茶、洋甘菊
+- 其他：檸檬款星沁爽、冰雪星沁爽、雙果果汁星冰樂
+**含奶**（補奶類）：
+- 名字有那堤／拿鐵、瑪奇朵、馥列白、卡布奇諾、摩卡、密斯朵、歐蕾、巧克力的飲品
+- 星冰樂（雙果果汁除外）、蛋白雲朵那堤、黑糖風味奶香咖啡
+- 容易搞錯：雲朵冰搖濃縮咖啡（雲朵是低脂牛奶打的）、椰奶款星沁爽（椰奶）、燕麥系列（燕麥奶）
+**主體不含牛奶**：經典特調冷萃、經典特調氮氣冷萃（只有香草甜奶油）；馥洛特、阿法奇朵（只有冰淇淋）
+直接打飲品名稱，我會告訴你那杯有沒有奶、補哪一種。`,
+    simple: `記法：名字有「那堤、拿鐵、瑪奇朵、歐蕾、巧克力、星冰樂」的大多有奶，去冰補滿選補奶類；美式、冷萃、一般茶、檸檬款星沁爽沒有奶，去冰補滿選補飲料。兩種都是 $15。`,
+    regions: ['ice_head', 'ice_milk', 'ice_drink', 'ice_note2'],
+    follow: ['蜜柚紅茶去冰補滿多少？', '醇濃抹茶那堤去冰補奶多少？', '雲朵冰搖濃縮有奶嗎？'],
+  },
+  {
     id: 'eco',
     title: '環保杯',
     keywords: ['環保杯', '自備杯', '自帶杯', '隨行杯', '帶杯', '自己的杯', '自備容器', '環保', '杯子折', '折10', '折十', '保溫杯'],
@@ -338,9 +362,9 @@ export const TOPICS = [
     low: true,
     keywords: ['大杯', '中杯', '特大杯', '小杯', '菜單', '原價', '單價', '價目', '一杯多少', '拿鐵多少', '美式多少'],
     answer:
-`這個小幫手只說明**客製化加價**，飲品本身的價格請看門市菜單。
-需要的話我可以幫你算加價，例如：「燕麥奶＋多一份濃縮＋環保杯」。`,
-    simple: `飲料本身的價格看菜單；我負責算「額外加的東西」要多付多少。`,
+`告訴我飲品名稱和杯型，我可以算出含加價的總價，例如「冰那堤大杯換燕麥奶」。
+飲品價格依官網（2026/10/12）整理，實際以門市結帳為準。`,
+    simple: `打飲品名稱加杯型，例如「冰那堤大杯」，我就能算總價。`,
     regions: [],
     follow: ['燕麥奶加多一份濃縮加環保杯多少？', '有哪些新收費？'],
   },
@@ -378,16 +402,21 @@ export const TOPICS = [
 
 export const WELCOME_CHIPS = [
   '有哪些新收費？',
-  '去冰補奶要加錢嗎？',
-  '抹茶液可以加幾份？',
-  '換燕麥奶多少？',
+  '冰蜜柚紅茶少冰大杯',
+  '醇濃抹茶那堤去冰補奶',
+  '哪些飲料有牛奶？',
   '用環保杯可以折嗎？',
-  '燕麥奶＋抹茶液＋環保杯多少？',
+  '抹茶液可以加幾份？',
 ];
 
 // -------------------------------------------------------------
 // 給 AI 的系統提示（由 Cloudflare Pages Function 使用）
 // -------------------------------------------------------------
+function drinkTable() {
+  const L = ['短', '中', '大', '特大'];
+  return DRINKS.map(d => `${d.n}｜${MILK_LABEL[d.m]}｜${d.c}｜${d.p.map((p, i) => (p == null ? null : `${L[i]}${p}`)).filter(Boolean).join(' ')}${d.note ? `｜${d.note}` : ''}${d.sauce ? `｜${d.sauce}` : ''}`).join('\n');
+}
+
 export function buildSystemPrompt() {
   const topicList = TOPICS.filter(t => t.regions.length)
     .map(t => `${t.id}=${t.title}`).join('、');
@@ -402,6 +431,10 @@ export function buildSystemPrompt() {
 - 其他配料每項 +15 元：抹茶液、鮮奶油、可可碎片、福吉茶粉、摩卡風味淋醬、焦糖風味淋醬、蜂蜜紅柚醬、星冰樂咖啡液、季節性物料；每杯每項限一份（所以抹茶液不能再免費加 8 份，現在加一份收 15 元，最多一份）。
 - 高蛋白雲朵 +60 元，口味：香草風味、可可；每杯每項限一份。建議避免搭配熱飲、冰搖茶、星沁爽、星冰樂、Cold Foam、果汁類及冰淇淋系列飲品。
 - 自備環保杯：一律每杯折 10 元；唯一例外是「買一送一」時不折抵。
+
+【飲品資料（官網）】名稱｜含奶狀態｜組成｜價格（短/中/大/特大杯）
+少冰／去冰想補滿：含奶飲品選「補奶類」、不含奶飲品選「補飲料」，都是 +15 元。
+${drinkTable()}
 
 【回答方式】
 - 一律使用繁體中文，語氣親切、口語，像門市夥伴。

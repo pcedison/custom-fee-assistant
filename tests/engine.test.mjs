@@ -1,6 +1,6 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
-import { localReply, computeQuote, normalize, parseAiReply } from '../public/engine.js';
+import { localReply, computeQuote, normalize, parseAiReply, buildOrder } from '../public/engine.js';
 import { REGIONS, TOPICS, ITEMS } from '../public/kb.js';
 
 let pass = 0;
@@ -36,7 +36,47 @@ t('環保杯規則', () => assert.match(reply('用環保杯可以折嗎').text, 
 t('實施日期', () => assert.match(reply('什麼時候開始').text, /2026\/10\/12/));
 t('抹茶份數', () => assert.match(reply('抹茶液可以加幾份？').text, /限加一份/));
 t('不相關問題交給 AI', () => assert.equal(reply('今天天氣如何'), null));
-t('飲品原價不亂答', () => assert.match(reply('大杯拿鐵多少錢').text, /菜單/));
+t('飲品原價依官網價格', () => assert.match(reply('大杯拿鐵多少錢').text, /大杯）：\$140/));
+
+console.log('飲品判斷（店長回饋）');
+const order = q => buildOrder(normalize(q));
+t('蜜柚紅茶不含奶：少冰提示補飲料、不出現補奶類', () => {
+  const o = order('蜜柚紅茶少冰1下糖');
+  assert.equal(o.drink.n, '冰蜜柚紅茶');
+  assert.equal(o.drink.m, 'none');
+  assert.ok(o.tips.some(x => /補飲料（補紅茶）/.test(x)));
+  assert.ok(!o.lines.some(l => l.id === 'ice_milk'));
+  assert.ok(o.lines.some(l => l.id === 'sweet' && l.amount == null));
+});
+t('醇濃抹茶那堤含奶：去冰加牛奶＝補奶類、抹茶粉＝抹茶液，加價 +30', () => {
+  const o = order('純濃抹茶去冰加牛奶加一匙抹茶粉');
+  assert.equal(o.drink.n, '冰醇濃抹茶那堤');
+  assert.equal(o.addTotal, 30);
+  assert.deepEqual(o.sizeTotals.map(x => x.total), [175, 190, 205]);
+});
+t('冰美式大杯去冰補奶＋環保杯 = $120', () => {
+  const o = order('冰美式大杯去冰補奶 環保杯');
+  assert.equal(o.basePrice + o.addTotal, 120);
+});
+t('熱飲去冰不收費也不列項', () => assert.equal(order('熱那堤去冰').lines.length, 0));
+t('兩杯一起問 → 分別列出含奶狀態', () => assert.equal(order('拿鐵和美式哪個有奶').kind, 'multi'));
+t('摩卡醬是加料，不是摩卡', () => {
+  const o = order('冰那堤加摩卡醬');
+  assert.equal(o.drink.n, '冰那堤');
+  assert.ok(o.lines.some(l => l.id === 'syrup_mocha'));
+});
+t('冰搖紅茶名稱完整辨識', () => assert.equal(order('冰搖紅茶').drink.n, '冰搖紅茶'));
+t('燕麥奶那堤換燕麥奶不加價', () => assert.equal(order('冰特選燕麥奶那堤換燕麥奶').addTotal, 0));
+t('接續追問「大杯呢？」沿用上一杯', () => {
+  const r = reply('大杯呢？', { lastOrder: '蜜柚紅茶少冰' });
+  assert.match(r.text, /合計（大杯）：\$150/);
+});
+
+t('飲品試算後按看不懂 → 依那杯解釋並標示', () => {
+  const r = reply('看不懂，標給我看', { lastOrder: '醇濃抹茶去冰加牛奶', lastTopics: ['ice'], lastWasQuote: true });
+  assert.match(r.text, /有奶的飲品/);
+  assert.ok(r.regions.includes('ice_milk'));
+});
 
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {
