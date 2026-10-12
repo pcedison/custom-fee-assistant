@@ -4,7 +4,7 @@
 // 以及最下方 buildSystemPrompt() 給 AI 的規則說明。
 // =============================================================
 
-import { DRINKS, MILK_LABEL } from './drinks.js?v=202610122013';
+import { DRINKS, MILK_LABEL } from './drinks.js?v=202610122014';
 
 export const EFFECTIVE_DATE = '2026/10/12';
 export const ECO_CUP_DISCOUNT = 10;
