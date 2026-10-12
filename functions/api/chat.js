@@ -21,6 +21,7 @@
 import { buildSystemPrompt, TOPICS } from '../../public/kb.js';
 import { dietFor } from '../../public/drinks.js';
 import { semanticRoute, brief, thresholds } from './semantic.js';
+import { CALIBRATION } from './calibration.js';
 
 const MAX_TURNS = 8;
 const MAX_CHARS = 400;
@@ -189,22 +190,25 @@ export async function onRequestPost({ request, env }) {
 export async function onRouteGet({ request, env }) {
   if (env.ROUTE_DEBUG !== '1' || !env.AI) return json({ error: 'disabled' }, 404);
   const url = new URL(request.url);
-  const items = url.searchParams.getAll('q').slice(0, 20).map(x => {
-    const [q, hint = ''] = String(x).slice(0, 120).split('|');
-    return { q: q.trim(), hint: hint.split(',').map(h => h.trim()).filter(h => TOPIC_IDS.has(h)) };
-  }).filter(x => x.q);
+  const items = url.searchParams.get('set')
+    ? CALIBRATION.map(([q, hint, expect]) => ({ q, hint, expect }))
+    : url.searchParams.getAll('q').slice(0, 20).map(x => {
+      const [q, hint = ''] = String(x).slice(0, 120).split('|');
+      return { q: q.trim(), hint: hint.split(',').map(h => h.trim()).filter(h => TOPIC_IDS.has(h)) };
+    }).filter(x => x.q);
   const r2 = x => Math.round(x * 1000) / 1000;
   const results = [];
   for (const it of items) {
     const sem = await semanticRoute(env, it.q, it.hint);
     results.push({
-      q: it.q, hint: it.hint.join(','), route: sem.local ? 'local' : 'ai',
+      q: it.q, hint: it.hint.join(','), route: sem.local ? 'local' : 'ai', expect: it.expect, ok: it.expect ? it.expect === (sem.local ? 'local' : 'ai') : undefined,
       hinted: r2(sem.hinted.score), best: `${sem.best.topic} ${r2(sem.best.score)}`,
       near: r2(sem.near.score), nearEx: sem.near.text,
       top: sem.top.map(t => `${t.topic} ${r2(t.score)} ${t.text}`),
     });
   }
-  return json({ th: thresholds(env), results });
+  const graded = results.filter(r => r.expect);
+  return json({ th: thresholds(env), correct: graded.length ? `${graded.filter(r => r.ok).length}/${graded.length}` : undefined, results });
 }
 
 // 健康檢查：GET /api/chat（不會顯示金鑰）

@@ -1,0 +1,27 @@
+// 語意分流校正題庫：[問題, 前端關鍵字找到的主題, 預期（local＝預寫答案答得到；ai＝答不到）]
+// GET /api/route?set=1 會用這些題目算分數並對照預期（wrangler.toml 的 ROUTE_DEBUG = "1" 才開放）
+export const CALIBRATION = [
+  ["用環保杯可以折嗎？", ["eco"], "local"],
+  ["帶杯子去買有比較便宜嗎", ["eco"], "local"],
+  ["自己帶杯可以少多少錢", ["eco"], "local"],
+  ["環保杯還有折10元嗎", ["eco"], "local"],
+  ["少冰會比較貴嗎", ["ice"], "local"],
+  ["補滿要另外收錢嗎", ["ice"], "local"],
+  ["新制什麼時候開始", ["date", "overview"], "local"],
+  ["哪些飲料不能客製化", ["not_customizable"], "local"],
+  ["抹茶可以加幾份", ["matcha", "limit"], "local"],
+  ["還可以免費加抹茶嗎", ["matcha", "free"], "local"],
+  ["高蛋白雲朵有哪些口味", ["protein", "syrup"], "local"],
+  ["什麼調整不用加錢", ["free"], "local"],
+  ["買一送一可以用環保杯折嗎", ["bogo", "eco"], "local"],
+  ["謝謝你", ["thanks"], "local"],
+  ["新的收費有哪些", ["overview"], "local"],
+  ["環保杯有哪些？", ["eco"], "ai"],
+  ["環保杯有限定是用保溫杯還是塑膠杯？", ["eco"], "ai"],
+  ["玻璃杯可以當環保杯嗎", ["eco"], "ai"],
+  ["環保杯需要先洗乾淨嗎", ["eco"], "ai"],
+  ["買一送一活動什麼時候會有", ["date", "bogo"], "ai"],
+  ["高蛋白雲朵的蛋白質有多少", ["protein"], "ai"],
+  ["低咖啡因是用什麼方法做的", ["espresso"], "ai"],
+  ["新制是全台門市都一樣嗎", ["overview"], "ai"],
+];
