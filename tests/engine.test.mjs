@@ -335,13 +335,18 @@ t('正確的說法不動', () => {
 });
 
 console.log('語意分流');
-const TH = { hard: 0.82, soft: 0.7, margin: 0.05 };
+const TH = { soft: 0.7, margin: 0.05 };
 const sc = (topic, score) => ({ topic, score, text: topic });
 t('很像預寫答案能回答的問法 → 用預寫答案', () => {
   assert.equal(decideRoute([sc('eco', 0.9), sc('_near', 0.6)], ['eco'], TH).local, true);
 });
 t('比較像「沒回答到」的問法 → 交給 AI', () => {
   assert.equal(decideRoute([sc('eco', 0.74), sc('_near', 0.88)], ['eco'], TH).local, false);
+});
+t('分數很高，但「答不到的例句」更像 → 交給 AI（正式環境校正時的兩題）', () => {
+  assert.equal(decideRoute([sc('eco', 0.831), sc('_near', 0.904)], ['eco'], TH).local, false);
+  assert.equal(decideRoute([sc('protein', 0.86), sc('_near', 0.986)], ['protein'], TH).local, false);
+  assert.equal(decideRoute([sc('ice', 0.776), sc('_near', 0.661)], ['ice'], TH).local, true);
 });
 t('都不夠像 → 交給 AI', () => {
   assert.equal(decideRoute([sc('eco', 0.6), sc('_near', 0.5)], ['eco'], TH).local, false);
@@ -391,7 +396,7 @@ const post = async (env, body) => {
 };
 await (async () => {
   const calls = [];
-  const env = { AI: fakeAI(calls), ROUTE_ACCEPT: '0.9', ROUTE_SOFT: '0.5', ROUTE_MARGIN: '0.02' };
+  const env = { AI: fakeAI(calls), ROUTE_SOFT: '0.5', ROUTE_MARGIN: '0.02' };
   resetBank();
   const a = await post(env, { messages: [{ role: 'user', content: '用環保杯可以折嗎？' }], route: { topics: ['eco'] } });
   t('後端：問法夠像 → 回 route local，不叫 AI', () => {

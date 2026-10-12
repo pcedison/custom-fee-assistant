@@ -94,7 +94,9 @@ git push origin main && git push -f origin gh-pages
 - 網址加 `?debug=1`，每則回覆下方會顯示：顧客問題最像哪個主題、分數、最像的「沒回答到」例句分數，以及最後用預寫答案還是 AI。
 - Cloudflare 後台 → Workers → Logs 會記錄每次分流（`"evt":"route"`），包含問題前 80 字與分數，可用來挑新的例句。
 - 有答錯的問法：預寫答案答得到的加到 `ROUTE_EXAMPLES`，答不到的加到 `ROUTE_NEAR_MISS`。
-- 門檻在 `wrangler.toml` 的 `ROUTE_ACCEPT`、`ROUTE_SOFT`、`ROUTE_MARGIN`。目前是預估值，請用實際問題校正。
+- 判斷方式：顧客問題要「夠像預寫答案答得到的例句」（`ROUTE_SOFT`），而且「比答不到的例句高出 `ROUTE_MARGIN`」，才用預寫答案。只看分數高低分不開，一定要和答不到的例句比。
+- 校正工具：`GET /api/route?set=1` 會用 `functions/api/calibration.js` 的題目算分數並對照預期；`GET /api/route?q=問題|主題代號` 查單一句。`wrangler.toml` 的 `ROUTE_DEBUG = "1"` 才開放，校正完可改 `"0"`。
+- 2026/10/13 以正式環境 bge-m3 校正 23 題：舊規則 21/23，現行規則見 `semantic.js` 註解。
 
 ### AI 供應商（依序嘗試，前一個失敗才換下一個）
 

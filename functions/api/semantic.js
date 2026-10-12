@@ -12,12 +12,15 @@ const NEAR = '_near';
 const BATCH = 50;
 
 // 門檻可用環境變數調整（wrangler.toml 的 [vars]）
+// 2026/10/13 用正式環境的 bge-m3 校正（GET /api/route?set=1，23 題）：
+//   預寫答案答得到的題目：比「答得到的例句」的分數，比「答不到的例句」高 0.115 以上
+//   答不到的題目：「答不到的例句」反而比較像（高 0.07 以上）
+//   只看絕對分數分不開（答不到的題目也有 0.83、0.86），所以一定要和「答不到的例句」比
 export function thresholds(env = {}) {
   const num = (v, d) => (Number.isFinite(Number(v)) && v !== '' && v != null ? Number(v) : d);
   return {
-    hard: num(env.ROUTE_ACCEPT, 0.82), // 這麼像就直接用預寫答案
-    soft: num(env.ROUTE_SOFT, 0.7), //    在這之上，還要比「沒回答到」的例句明顯更像
-    margin: num(env.ROUTE_MARGIN, 0.05),
+    soft: num(env.ROUTE_SOFT, 0.7), //     至少要這麼像預寫答案能回答的問法
+    margin: num(env.ROUTE_MARGIN, 0.05), // 而且要比「答不到的例句」高出這麼多
   };
 }
 
@@ -74,8 +77,9 @@ export function decideRoute(scored, hintTopics, th) {
     if (s.score > best.score) best = s;
     if (hint.has(s.topic) && s.score > hinted.score) hinted = s;
   }
-  const local = hinted.score >= th.hard
-    || (hinted.score >= th.soft && hinted.score >= near.score + th.margin && hinted.score >= best.score - 0.02);
+  const local = hinted.score >= th.soft
+    && hinted.score >= near.score + th.margin
+    && hinted.score >= best.score - 0.02;
   return { local, hinted, best, near };
 }
 

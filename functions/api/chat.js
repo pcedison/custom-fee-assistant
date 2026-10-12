@@ -12,7 +12,8 @@
 //   OPENROUTER_MODEL      選填，預設 openrouter/free
 //   ALLOWED_ORIGINS       選填，允許呼叫的其他網域，逗號分隔
 //   EMBED_MODEL           選填，語意分流用的向量模型，預設 @cf/baai/bge-m3
-//   ROUTE_ACCEPT / ROUTE_SOFT / ROUTE_MARGIN  選填，語意分流門檻（見 semantic.js）
+//   ROUTE_SOFT / ROUTE_MARGIN  選填，語意分流門檻（見 semantic.js）
+//   ROUTE_DEBUG           "1" 時開放 GET /api/route 校正工具
 //
 // 請求可帶 route：
 //   { topics: [...] }   前端關鍵字找到預寫答案 → 先做語意比對，夠像回 { route: 'local' }，不夠像才叫 AI
