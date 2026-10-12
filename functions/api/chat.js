@@ -20,7 +20,7 @@
 // =============================================================
 import { buildSystemPrompt, TOPICS } from '../../public/kb.js';
 import { dietFor } from '../../public/drinks.js';
-import { semanticRoute, brief } from './semantic.js';
+import { semanticRoute, brief, thresholds } from './semantic.js';
 
 const MAX_TURNS = 8;
 const MAX_CHARS = 400;
@@ -182,6 +182,29 @@ export async function onRequestPost({ request, env }) {
     }
   }
   return json({ error: lastCode }, lastCode === 'rate_limited' ? 429 : 502);
+}
+
+// 校正語意分流用：GET /api/route?q=問題|主題代號&q=…（wrangler.toml 設 ROUTE_DEBUG = "1" 才開放）
+// 回傳每句的相似度，方便調整例句與門檻。只算向量，不呼叫聊天模型。
+export async function onRouteGet({ request, env }) {
+  if (env.ROUTE_DEBUG !== '1' || !env.AI) return json({ error: 'disabled' }, 404);
+  const url = new URL(request.url);
+  const items = url.searchParams.getAll('q').slice(0, 20).map(x => {
+    const [q, hint = ''] = String(x).slice(0, 120).split('|');
+    return { q: q.trim(), hint: hint.split(',').map(h => h.trim()).filter(h => TOPIC_IDS.has(h)) };
+  }).filter(x => x.q);
+  const r2 = x => Math.round(x * 1000) / 1000;
+  const results = [];
+  for (const it of items) {
+    const sem = await semanticRoute(env, it.q, it.hint);
+    results.push({
+      q: it.q, hint: it.hint.join(','), route: sem.local ? 'local' : 'ai',
+      hinted: r2(sem.hinted.score), best: `${sem.best.topic} ${r2(sem.best.score)}`,
+      near: r2(sem.near.score), nearEx: sem.near.text,
+      top: sem.top.map(t => `${t.topic} ${r2(t.score)} ${t.text}`),
+    });
+  }
+  return json({ th: thresholds(env), results });
 }
 
 // 健康檢查：GET /api/chat（不會顯示金鑰）

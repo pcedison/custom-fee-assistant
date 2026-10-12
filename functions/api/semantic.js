@@ -82,7 +82,9 @@ export function decideRoute(scored, hintTopics, th) {
 export async function semanticRoute(env, query, hintTopics) {
   const [bank, [q]] = await Promise.all([bankVectors(env), embed(env, [query])]);
   const scored = bank.map(b => ({ topic: b.topic, text: b.text, score: dot(q, b.v) }));
-  return decideRoute(scored, hintTopics, thresholds(env));
+  const r = decideRoute(scored, hintTopics, thresholds(env));
+  r.top = [...scored].sort((a, b) => b.score - a.score).slice(0, 3);
+  return r;
 }
 
 // 回給前端（除錯畫面用）的精簡資訊

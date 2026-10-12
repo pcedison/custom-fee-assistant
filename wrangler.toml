@@ -24,6 +24,7 @@ EMBED_MODEL = "@cf/baai/bge-m3"
 ROUTE_ACCEPT = "0.82"   # 相似度達到這個值：直接用預寫答案
 ROUTE_SOFT = "0.70"     # 介於 SOFT 與 ACCEPT：還要比「沒回答到」的例句高出 MARGIN
 ROUTE_MARGIN = "0.05"
+ROUTE_DEBUG = "1"       # 開放 GET /api/route 校正工具（只算相似度）；校正完可改成 "0" 關閉
 
 [observability]
 enabled = true
