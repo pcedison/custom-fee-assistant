@@ -13,6 +13,7 @@
 //   ALLOWED_ORIGINS       選填，允許呼叫的其他網域，逗號分隔
 // =============================================================
 import { buildSystemPrompt } from '../../public/kb.js';
+import { dietFor } from '../../public/drinks.js';
 
 const MAX_TURNS = 8;
 const MAX_CHARS = 400;
@@ -127,7 +128,9 @@ export async function onRequestPost({ request, env }) {
   const messages = sanitize(body?.messages);
   if (!messages.length || messages[messages.length - 1].role !== 'user') return json({ error: 'bad_request' }, 400);
 
-  const system = buildSystemPrompt();
+  // 不含奶／牛奶過敏的推薦題：只給 AI 看不含奶的飲品，避免推薦到含奶的
+  const diet = dietFor(messages);
+  const system = buildSystemPrompt({ diet: diet.recommend ? diet.diet : null });
   const origin = new URL(request.url).origin;
   let lastCode = 'upstream';
   for (const [name, call] of list) {

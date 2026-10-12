@@ -1,6 +1,8 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
-import { localReply, computeQuote, normalize, parseAiReply, buildOrder } from '../public/engine.js';
+import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixFacts, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
+import { DRINKS, dietSafe } from '../public/drinks.js';
+import { buildSystemPrompt } from '../public/kb.js';
 import { REGIONS, TOPICS, ITEMS } from '../public/kb.js';
 
 let pass = 0;
@@ -252,6 +254,74 @@ t('取出 [[HL:...]] 並移除', () => {
   const r = parseAiReply('<think>x</think>去冰補奶 +$15\n[[HL:ice]]');
   assert.equal(r.text, '去冰補奶 +$15');
   assert.ok(r.regions.includes('ice_milk'));
+});
+
+console.log('不含奶／過敏推薦');
+const u = q => [{ role: 'user', content: q }];
+t('辨識推薦題', () => {
+  assert.deepEqual(dietFor(u('推薦我一杯不含奶的飲料')), { diet: 'nomilk', recommend: true, inherited: false });
+  assert.deepEqual(dietFor(u('我對牛奶過敏可以喝什麼')), { diet: 'allergy', recommend: true, inherited: false });
+  assert.deepEqual(dietFor(u('有沒有不含奶的')), { diet: 'nomilk', recommend: true, inherited: false });
+});
+t('不是推薦題：問某杯有沒有奶、去冰不補奶、不要奶泡', () => {
+  for (const q of ['冰美式有沒有奶', '去冰不補奶', '冰那堤不要奶泡', '冷萃跟美式差在哪']) assert.equal(dietFor(u(q)).diet, null, q);
+  assert.equal(dietFor(u('乳糖不耐冰那堤換燕麥奶多少')).recommend, false);
+});
+t('短追問沿用上一句的需求', () => {
+  const r = dietFor([...u('我對牛奶過敏可以喝什麼'), { role: 'assistant', content: 'x' }, ...u('那熱的呢')]);
+  assert.deepEqual(r, { diet: 'allergy', recommend: true, inherited: true });
+});
+t('AI 推薦含奶飲品、自創無奶版本 → 換成固定答案', () => {
+  const p = parseAiReply('推薦你：\n- 冰美式咖啡：清爽\n- 冰摩卡（無奶）：濃縮咖啡＋摩卡醬\n- 冰那堤：可以要求不加奶\n[[DRINKS:冰美式咖啡,冰摩卡,冰那堤]]');
+  const g = guardDietReply('allergy', p);
+  assert.equal(g.status, 'replaced');
+  assert.equal(g.refs[0].text, '冰美式咖啡');
+  assert.ok(g.refs.length > 1 && g.refs.every(r => r.dairyFree));
+  assert.ok(!/冰摩卡|冰那堤|要求不加奶/.test(g.text));
+});
+t('只說「可以要求不加奶」也算錯', () => assert.equal(dietProblems('如果想喝那堤，可以請夥伴不加奶').length, 1));
+t('經典特調冷萃（奶油）對過敏不算不含奶', () => assert.equal(dietProblems('- 經典特調冷萃咖啡：冷萃加香草甜奶油').length, 1));
+t('正確的回答保留，提醒句不算錯', () => {
+  const ok = '不含奶的可以選：\n- 冷萃咖啡：冷水長時間浸泡，沒有加牛奶\n- 冰搖檸檬紅茶：酸甜\n- 雙果果汁星冰樂：果汁冰沙\n名字有那堤、摩卡的都含奶，請避開。\n不要把含奶的飲品改成不加奶來點。\n椰奶款星沁爽有椰奶。';
+  assert.deepEqual(dietProblems(ok), []);
+  const g = guardDietReply('nomilk', parseAiReply(ok + '\n[[DRINKS:冷萃咖啡,冰搖檸檬紅茶]]'));
+  assert.equal(g.status, 'ok');
+  assert.deepEqual(g.refs.map(r => r.text), ['冷萃咖啡', '冰搖檸檬紅茶']);
+});
+t('只有一兩行含奶 → 拿掉那幾行（含編號項目底下的說明），其餘保留', () => {
+  const raw = '對牛奶過敏的話，熱飲可以選：\n1. **美式咖啡**\n- 濃縮咖啡加熱水\n2. **經典紅茶那堤**\n- 口感溫和\n3. **英式紅茶**\n- 清爽\n[[DRINKS:美式咖啡,經典紅茶那堤,英式紅茶]]';
+  const g = guardDietReply('allergy', parseAiReply(raw));
+  assert.equal(g.status, 'repaired');
+  assert.ok(!/紅茶那堤|口感溫和/.test(g.text));
+  assert.ok(/美式咖啡/.test(g.text) && /英式紅茶/.test(g.text) && /清爽/.test(g.text));
+  assert.ok(g.text.includes('⚠️ 奶油、冰淇淋也是乳製品'));
+  assert.deepEqual(g.refs.map(r => r.text), ['美式咖啡', '英式紅茶']);
+});
+t('「對牛奶過敏」是在說需求，不算含奶', () => assert.deepEqual(dietProblems('對牛奶過敏的話，可以選這幾杯：\n- 冷萃咖啡'), []));
+t('固定答案只列不含奶的飲品', () => {
+  const fb = dietFallback('allergy');
+  assert.ok(fb.refs.length && fb.refs.every(r => r.dairyFree));
+  for (const d of DRINKS.filter(d => !dietSafe(d))) assert.ok(!fb.text.split('\n').slice(1, 5).join('').includes(d.n), d.n);
+});
+t('AI 提示：推薦題只給不含奶的飲品資料', () => {
+  const sp = buildSystemPrompt({ diet: 'allergy' });
+  const okPart = sp.slice(sp.indexOf('｜價格）：'), sp.indexOf('含奶或有乳製品（不能推薦）'));
+  assert.ok(okPart.includes('冰美式咖啡｜不含奶'));
+  assert.ok(!/｜含奶|有奶油|有冰淇淋|雲朵泡泡/.test(okPart));
+  assert.ok(buildSystemPrompt().includes('冷萃咖啡：用冷水長時間浸泡咖啡粉萃取，不是用濃縮咖啡做的'));
+});
+
+console.log('AI 飲品知識校正');
+t('「冷萃和美式都用濃縮咖啡」整句拿掉並補正確說法', () => {
+  const r = parseAiReply('差別：\n- 冷萃和美式都是用濃縮咖啡做基底，但冷萃是冷泡的。\n- 冰美式是用熱水沖泡濃縮咖啡後加冰。\n冷萃不能補，但可以加一份濃縮 +$15。');
+  assert.ok(!/都是用濃縮|熱水沖泡/.test(r.text));
+  assert.ok(r.text.includes('不是用濃縮咖啡做的'));
+  assert.ok(r.text.includes('加一份濃縮 +$15'));
+  assert.ok(!/\n\s*\n/.test(r.text));
+});
+t('正確的說法不動', () => {
+  const ok = '冷萃咖啡是用冷水浸泡萃取，不是濃縮咖啡。美式是濃縮咖啡加水。冷萃也可以升級特選，加濃縮 +$15。';
+  assert.equal(fixFacts(ok), ok);
 });
 
 console.log(`\n${pass} 項通過`);

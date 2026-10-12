@@ -27,7 +27,7 @@ export const DRINKS = [
   D(703, '冰焦糖瑪奇朵', 'iced', 'dairy', [null, 145, 160, 175], 'esp', '濃縮咖啡＋鮮奶＋香草風味糖漿＋焦糖醬'),
   D(706, '冰馥列白', 'iced', 'dairy', [null, 140, 155, 170], 'esp', '濃縮咖啡（ristretto）＋牛奶'),
   D(707, '冰可可瑪奇朵', 'iced', 'dairy', [null, 145, 160, 175], 'esp', '濃縮咖啡＋鮮奶＋香草風味糖漿＋可可糖醬'),
-  D(702, '冰美式咖啡', 'iced', 'none', [null, 100, 115, 130], 'esp', '濃縮咖啡＋水', { fill: '咖啡' }),
+  D(702, '冰美式咖啡', 'iced', 'none', [null, 100, 115, 130], 'esp', '濃縮咖啡＋冷水＋冰塊', { fill: '咖啡' }),
   D(704, '冰摩卡', 'iced', 'dairy', [null, 140, 155, 170], 'esp', '濃縮咖啡＋摩卡醬＋牛奶＋鮮奶油'),
   D(705, '冰特選馥郁那堤', 'iced', 'dairy', [null, 155, 170, 185], 'esp', '特選濃縮咖啡＋牛奶', { note: '10/12 起特選濃縮升級改為 +$15，價格比官網標示多 $5（門市已確認）' }),
   D(708, '雲朵冰搖濃縮咖啡', 'iced', 'dairy', [null, 135, 150, 165], 'esp', '冰搖濃縮咖啡＋雲朵（低脂牛奶打成的冰奶泡）', { coldfoam: 1 }),
@@ -52,7 +52,7 @@ export const DRINKS = [
   D(697, '摩卡', 'hot', 'dairy', [null, 140, 155, 170], 'esp', '濃縮咖啡＋摩卡醬＋牛奶＋鮮奶油'),
   D(698, '特選馥郁那堤', 'hot', 'dairy', [null, 155, 170, 185], 'esp', '特選濃縮咖啡＋牛奶', { note: '10/12 起特選濃縮升級改為 +$15，價格比官網標示多 $5（門市已確認）' }),
   D(1025, '焦糖奶香星享那堤', 'hot', 'dairy', [null, null, 165, 180], 'esp', '焦糖風味那堤＋焦糖奶油', { note: '外送限定' }),
-  D(710, '每日精選咖啡', 'hot', 'none', [80, 90, 100, 110], 'brew', '濾泡咖啡', { fill: '咖啡' }),
+  D(710, '每日精選咖啡', 'hot', 'none', [80, 90, 100, 110], 'brew', '濾泡咖啡（用咖啡機沖煮，不是濃縮咖啡）', { fill: '咖啡' }),
   D(712, '咖啡密斯朵', 'hot', 'dairy', [80, 90, 100, 110], 'brew', '一半每日精選咖啡＋一半牛奶'),
 
   // ---- 茶瓦納 ----
@@ -105,14 +105,14 @@ export const DRINKS = [
 
   // ---- 冷萃、氮氣冷萃 ----
   D(966, '紅心芭樂冷萃咖啡', 'iced', 'none', [null, 140, 160, 180], 'cb', '冷萃咖啡＋紅心芭樂檸檬', { fill: '冷萃咖啡', nocustom: 1 }),
-  D(751, '冷萃咖啡', 'iced', 'none', [null, 125, 145, 165], 'cb', '冷萃咖啡', { fill: '冷萃咖啡' }),
+  D(751, '冷萃咖啡', 'iced', 'none', [null, 125, 145, 165], 'cb', '冷水長時間浸泡咖啡粉萃取（不是濃縮咖啡）＋冰塊', { fill: '冷萃咖啡' }),
   D(758, '經典特調冷萃咖啡', 'iced', 'cream', [null, 150, 170, 190], 'cb', '冷萃咖啡＋香草甜奶油', { fill: '冷萃咖啡' }),
   D(753, '香檸蜜柚冷萃咖啡', 'iced', 'none', [null, 140, 160, 180], 'cb', '冷萃咖啡＋檸檬＋蜜柚醬', { fill: '冷萃咖啡' }),
   D(754, '夏日冰柚冷萃咖啡', 'iced', 'none', [null, 140, 160, 180], 'cb', '冷萃咖啡＋蜂蜜紅柚醬', { fill: '冷萃咖啡', sauce: `蜂蜜紅柚醬${FIX}` }),
   D(684, '檸檬冷萃咖啡', 'iced', 'none', [null, 140, 160, 180], 'cb', '冷萃咖啡＋檸檬', { fill: '冷萃咖啡' }),
   D(756, '鹹焦糖風味氮氣歐蕾', 'iced', 'dairy', [null, 170, 190, 210], 'cb', '氮氣冷萃＋牛奶＋鹹焦糖風味'),
   D(757, '經典特調氮氣冷萃咖啡', 'iced', 'cream', [null, 180, 200, 220], 'cb', '氮氣冷萃＋香草甜奶油', { fill: '冷萃咖啡' }),
-  D(752, '氮氣冷萃咖啡', 'iced', 'none', [null, 155, 175, 195], 'cb', '氮氣冷萃咖啡', { fill: '冷萃咖啡' }),
+  D(752, '氮氣冷萃咖啡', 'iced', 'none', [null, 155, 175, 195], 'cb', '冷萃咖啡注入氮氣，口感綿密', { fill: '冷萃咖啡' }),
   D(759, '氮氣冷萃咖啡歐蕾', 'iced', 'dairy', [null, 155, 175, 195], 'cb', '氮氣冷萃＋牛奶'),
 
   // ---- 星沁爽 ----
@@ -170,8 +170,8 @@ export const MILK_LABEL = {
   dairy: '含奶（鮮奶）',
   oat: '含奶（燕麥奶）',
   coconut: '含奶（椰奶）',
-  cream: '不含牛奶，有奶油',
-  icecream: '不含牛奶，有冰淇淋',
+  cream: '不含牛奶，但有奶油（乳製品）',
+  icecream: '不含牛奶，但有冰淇淋（乳製品）',
   none: '不含奶',
 };
 
@@ -199,3 +199,37 @@ export function refillType(d) {
 //   沒有：茶、茶那堤、巧克力、星冰樂（咖啡星冰樂用的是咖啡，不是濃縮）、冷萃、每日精選、星沁爽、果汁
 export const hasEspresso = d => d.g === 'esp' || d.id === 946 || d.id === 948;
 export const isChoiceDrink = d => /特選/.test(d.n);
+
+// ---------------------------------------------------------------
+// 不含奶／牛奶過敏（AI 推薦時的安全範圍）
+//   奶油（香草甜奶油）、冰淇淋也是乳製品，所以只有 none 算不含奶。
+//   雲朵泡泡美式：名字有「雲朵」但官網未列奶類，過敏時請門市確認，不主動推薦。
+// ---------------------------------------------------------------
+export const isDairyFree = d => d.m === 'none';
+export const dairyUnsure = d => d.m === 'none' && /雲朵/.test(d.n);
+export const dietSafe = d => isDairyFree(d) && !dairyUnsure(d);
+
+// 'allergy'：牛奶過敏、乳糖不耐、全素；'nomilk'：想喝不含奶的；null：沒提到
+export function dietIntent(text) {
+  const t = String(text || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '')
+    .replace(/有沒有(牛|鮮)?奶|有奶嗎|含奶嗎/g, '');
+  if (/過敏|乳糖|全素|純素|vegan|不能(喝|吃|碰)(牛|鮮)?奶|奶類?不耐/.test(t)) return 'allergy';
+  if (/(不|沒|無|免|零|非)(含|有|加|要|喝|放)?(牛|鮮)?(奶|乳)(?!泡|油|蓋|昔|精)|去奶|沒有牛奶/.test(t)) return 'nomilk';
+  return null;
+}
+
+// 想要對方「推薦／列出」飲品（不是在問某一杯）
+export const RE_RECOMMEND = /推薦|建議|適合|喝什麼|喝哪|哪些|哪一杯|哪杯|有什麼|有哪|可以喝|能喝|想喝|幫我選|怎麼選|什麼飲料|什麼可以|選哪|給我/;
+
+// 看最後一句；很短的追問（例如「那熱的呢」）沿用上一句的需求
+export function dietFor(messages) {
+  const norm = x => String(x || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+  const users = (messages || []).filter(m => m && m.role === 'user').map(m => norm(m.content));
+  const last = users[users.length - 1] || '';
+  let diet = dietIntent(last);
+  // 短追問往前找最近三句裡提過的需求
+  const inherited = !diet && users.length > 1 && last.length <= 10;
+  if (inherited) diet = users.slice(-4, -1).reverse().map(dietIntent).find(Boolean) || null;
+  const recommend = !!diet && (inherited || RE_RECOMMEND.test(last) || /有沒有|還有|其他|別的/.test(last));
+  return { diet, recommend, inherited: !!(inherited && diet) };
+}
