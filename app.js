@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122116';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122116';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122116';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122132';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122132';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122132';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -25,6 +25,10 @@ const viewerTabs = $('#viewerTabs');
 const viewerDl = $('#viewerDl');
 const panelImg = $('#panelImg');
 const panelCaption = $('#panelCaption');
+const root = document.documentElement;
+const chartBtn = $('#chartBtn');
+const panelHide = $('#panelHide');
+const wide = matchMedia('(min-width: 1000px)');
 
 const state = {
   history: [],
@@ -221,12 +225,18 @@ function showTyping() {
   return () => row.remove();
 }
 
-function setChips(list, current = '') {
+// 輸入框上方的「建議問題」：開場列常見問題；之後只放跟上一題有關的追問，沒有就不顯示
+function setChips(list, current = '', title = '接著問') {
   chipsEl.innerHTML = '';
   const seen = new Set();
-  for (const text of list) {
-    if (!text || text === current || seen.has(text)) continue;
-    seen.add(text);
+  const items = (list || []).filter(text => text && text !== current && !seen.has(text) && seen.add(text));
+  chipsEl.hidden = !items.length;
+  if (!items.length) return;
+  const label = document.createElement('span');
+  label.className = 'chips-label';
+  label.textContent = title;
+  chipsEl.appendChild(label);
+  for (const text of items) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip' + (text === MARK_CHIP ? ' chip-mark' : '');
@@ -260,6 +270,7 @@ async function attachImage(row, { regions, plain, caption }) {
     btn.addEventListener('click', () => openViewer(shot));
     btn.querySelector('img').addEventListener('load', scrollToEnd, { once: true });
     state.latestShot = shot;
+    if (!plain && !chartOnScreen()) chartBtn.dataset.new = '';
     panelImg.src = shot.full;
     panelCaption.textContent = plain ? '完整的收費圖表。' : '橘色螢光筆是最新一題的重點。';
   } catch {
@@ -291,7 +302,7 @@ function botReply(r, userText) {
     state.lastWasQuote = !!(r.quote || r.order);
   }
   state.history.push({ role: 'assistant', content: r.text });
-  setChips(r.chips?.length ? r.chips : WELCOME_CHIPS.slice(0, 3), userText);
+  setChips(r.chips || [], userText);
 }
 
 // 卡片上的按鈕：冰量（正常冰／少冰／去冰）＋橘框「要補／不補」，在同一張卡片即時切換價格
@@ -383,7 +394,7 @@ const RE_HEALTH = /(過敏|乳糖|孕婦|懷孕|咖啡因|熱量|卡路里|健�
 
 function dietReply(kind) {
   const fb = dietFallback(kind);
-  return { source: 'local', meta: '依官網成分整理', text: fb.text, refs: fb.refs, refsTitle: '不含奶的飲品', health: kind === 'allergy' ? 'allergy' : false, topics: [], chips: WELCOME_CHIPS.slice(0, 3) };
+  return { source: 'local', meta: '依官網成分整理', text: fb.text, refs: fb.refs, refsTitle: '不含奶的飲品', health: kind === 'allergy' ? 'allergy' : false, topics: [], chips: ['哪些飲料有牛奶？'] };
 }
 
 // 規則有看不懂的詞時，先問 AI 能不能聽懂
@@ -455,7 +466,7 @@ async function send(text) {
         return;
       }
       if (ord && !ord.r) {
-        botReply({ source: 'ai', text: `我判讀成「${ord.text}」，但對不到菜單上的飲品，可以換個說法或打飲品名稱的關鍵字。`, topics: [], chips: WELCOME_CHIPS.slice(0, 3) }, text);
+        botReply({ source: 'ai', text: `我判讀成「${ord.text}」，但對不到菜單上的飲品，可以換個說法或打飲品名稱的關鍵字。`, topics: [] }, text);
         return;
       }
       const p = parseAiReply(ai.reply.replace(/^.*ORDER\s*[:：].*$/gim, ''));
@@ -475,7 +486,7 @@ async function send(text) {
         regions: p.regions,
         caption: '圖上相關的地方用橘色螢光筆標起來了，點圖可以放大。',
         topics: onTopic ? p.topics : [],
-        chips: onTopic && p.topics.length ? [MARK_CHIP, ...WELCOME_CHIPS.slice(0, 2)] : WELCOME_CHIPS.slice(0, 3),
+        chips: onTopic && p.topics.length ? [MARK_CHIP] : [],
       }, text);
     } else {
       if (dietAsk) { botReply(dietReply(diet.diet), text); return; }
@@ -483,7 +494,7 @@ async function send(text) {
       const msg = AI_ERRORS[ai.error] || 'AI 暫時無法回覆，請稍後再試，或點下面的常見問題。';
       addMessage('bot', renderText(msg), '系統訊息');
       state.history.pop();
-      setChips(WELCOME_CHIPS, text);
+      setChips(WELCOME_CHIPS, text, '常見問題');
     }
   } finally {
     state.busy = false;
@@ -499,6 +510,7 @@ log.addEventListener('click', e => {
 
 // ---------- 圖片檢視 ----------
 function openViewer(shot) {
+  delete chartBtn.dataset.new;
   const views = [];
   if (shot.crop) views.push(['標示處', shot.crop]);
   views.push([shot.plain ? '收費圖表' : '整張圖', shot.full]);
@@ -524,7 +536,31 @@ function openViewer(shot) {
 viewerImg.addEventListener('click', () => viewerImg.classList.toggle('zoomed'));
 $('#viewerClose').addEventListener('click', () => viewer.close());
 viewer.addEventListener('click', e => { if (e.target === viewer) viewer.close(); });
-$('#chartBtn').addEventListener('click', async () => {
+// ---------- 收費圖表：桌機可隱藏右側圖表；手機用頂部按鈕開圖 ----------
+const CHART_KEY = 'chartHidden';
+const chartOnScreen = () => wide.matches && !root.classList.contains('chart-hidden');
+function syncChartBtn() {
+  const restore = wide.matches && root.classList.contains('chart-hidden');
+  chartBtn.setAttribute('aria-label', restore ? '顯示收費圖表' : '查看收費圖表');
+  if (chartOnScreen()) delete chartBtn.dataset.new;
+}
+function setChartHidden(hidden, save = true) {
+  root.classList.toggle('chart-hidden', hidden);
+  panelHide.setAttribute('aria-expanded', String(!hidden));
+  if (save) { try { localStorage.setItem(CHART_KEY, hidden ? '1' : '0'); } catch { /* 無痕模式等 */ } }
+  syncChartBtn();
+}
+// 上次的選擇已由 index.html 開頭的小程式先套用（避免畫面閃一下），這裡只同步按鈕狀態
+setChartHidden(root.classList.contains('chart-hidden'), false);
+wide.addEventListener('change', syncChartBtn);
+panelHide.addEventListener('click', () => { setChartHidden(true); chartBtn.focus(); });
+
+chartBtn.addEventListener('click', async () => {
+  if (wide.matches && root.classList.contains('chart-hidden')) {
+    setChartHidden(false);
+    panelHide.focus();
+    return;
+  }
   if (state.latestShot) return openViewer(state.latestShot);
   try { await loadMenuImage(MENU_SRC); } catch { /* 開啟後仍會顯示 */ }
   openViewer({ full: MENU_SRC, crop: null, plain: true });
@@ -552,5 +588,5 @@ addMessage('bot', renderText(
 `嗨，我是客製化加價小幫手。
 ${EFFECTIVE_DATE} 起，補奶、加料、換特殊奶等客製化項目開始加價。
 直接打飲品和想調整的地方，例如「冰蜜柚紅茶少冰大杯」，我會告訴你這杯有沒有奶、要補什麼，並算好總價。記不得全名也沒關係，打「可可」「桂花」這類關鍵字，我會列出符合的飲品。
-有看不懂的地方，我會在收費圖表上用螢光筆標給你看。`), '依收費規則回覆');
-setChips(WELCOME_CHIPS);
+有看不懂的地方，我會在收費圖表上用螢光筆標給你看。${wide.matches ? '' : '\n想看完整收費圖表，隨時點右上角的圖表按鈕。'}`), '依收費規則回覆');
+setChips(WELCOME_CHIPS, '', '常見問題');

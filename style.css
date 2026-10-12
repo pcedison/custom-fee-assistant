@@ -70,12 +70,22 @@ button { cursor: pointer; }
 .chat-head h1 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
 .head-text p { margin: 1px 0 0; font-size: 12.5px; color: var(--ink-2); }
 .head-btn {
+  position: relative;
   margin-left: auto; flex: none;
   display: inline-flex; align-items: center; gap: 5px;
   border: 1px solid var(--line); background: var(--paper);
-  border-radius: 999px; padding: 6px 12px 6px 9px; font-size: 14px;
+  border-radius: 999px; padding: 6px 12px 6px 9px; font-size: 14px; white-space: nowrap;
 }
 .head-btn svg { width: 18px; height: 18px; }
+.head-btn .lbl-d { display: none; }
+/* 有新標示、但圖表沒顯示在畫面上時，按鈕右上角亮橘點 */
+.new-dot {
+  display: none; position: absolute; top: -2px; right: -2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--marker-solid); border: 2px solid var(--surface);
+}
+.head-btn[data-new] .new-dot { display: block; }
+@media (max-width: 380px) { .head-btn .lbl-x { display: none; } }
 
 .avatar {
   width: 32px; height: 32px; flex: none;
@@ -287,6 +297,8 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
 }
 .chips::-webkit-scrollbar { display: none; }
 .chips:empty { padding: 0; }
+.chips { align-items: center; }
+.chips-label { flex: none; font-size: 12.5px; color: var(--ink-2); margin-right: -2px; white-space: nowrap; }
 .chip {
   flex: none;
   border: 1px solid var(--line); background: var(--paper);
@@ -352,28 +364,52 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
 /* ---------- 桌機：右側常駐圖表 ---------- */
 @media (min-width: 1000px) {
   body { background: var(--bg-outer); }
-  .app { gap: 28px; padding: 24px; align-items: stretch; }
+  .app { --panel-w: min(46vw, 640px); gap: 28px; padding: 24px; align-items: stretch; }
   .chat {
     height: calc(100dvh - 48px); max-width: 540px;
     border: 1px solid var(--line); border-radius: 24px; overflow: hidden;
+    transition: max-width 0.3s ease;
   }
   .head-btn { display: none; }
+  .head-btn .lbl-m { display: none; }
+  .head-btn .lbl-d { display: inline; }
   .panel {
-    display: flex; flex-direction: column;
-    width: min(46vw, 640px); height: calc(100dvh - 48px);
-    padding-top: 6px;
+    display: block; flex: none;
+    width: var(--panel-w); height: calc(100dvh - 48px);
+    overflow: hidden;
+    transition: width 0.3s ease, opacity 0.2s ease;
   }
+  .panel-inner { width: var(--panel-w); height: 100%; display: flex; flex-direction: column; padding-top: 6px; }
+  .panel-head { display: flex; align-items: center; gap: 12px; }
   .panel h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  .panel-hide {
+    margin-left: auto; flex: none;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--line); background: var(--paper);
+    border-radius: 999px; padding: 6px 13px 6px 10px; font-size: 14px;
+  }
+  .panel-hide svg { width: 18px; height: 18px; }
+  .panel-hide:hover, .head-btn:hover { border-color: var(--ink-2); }
   .panel p { margin: 4px 0 14px; font-size: 14px; color: var(--ink-2); }
   .panel-btn {
     padding: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
     background: #fff; cursor: zoom-in; align-self: flex-start;
-    max-height: calc(100% - 64px); aspect-ratio: 1285 / 1274;
+    max-height: calc(100% - 76px); aspect-ratio: 1285 / 1274;
   }
   .panel-btn img { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+  /* 隱藏圖表：圖表收起，對話框往右延伸到原本圖表的位置（左緣不動） */
+  .chart-hidden .chat { max-width: calc(540px + var(--panel-w)); }
+  .chart-hidden .panel {
+    width: 0; opacity: 0; visibility: hidden;
+    transition: width 0.3s ease, opacity 0.2s ease, visibility 0s linear 0.3s;
+  }
+  .chart-hidden .head-btn { display: inline-flex; }
+  .chart-hidden .stack { max-width: min(78%, 680px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat, .panel, .chart-hidden .panel { transition: none !important; }
   .typing .bubble span { animation: none; opacity: 0.6; }
   .chip:active { transform: none; }
 }

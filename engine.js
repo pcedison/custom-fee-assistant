@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122116';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122116';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122132';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122132';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
