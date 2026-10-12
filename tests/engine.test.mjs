@@ -87,7 +87,7 @@ t('只說去冰：不算錢，立刻反問需要補牛奶嗎', () => {
   const r = reply('特選馥郁那堤大杯去冰');
   assert.equal(r.order.addTotal, 0);
   assert.match(r.order.ask.q, /需要補牛奶嗎/);
-  assert.ok(r.chips.includes('要補牛奶') && r.chips.includes('不用補'));
+  assert.deepEqual(r.pending, { add: '補牛奶' });
 });
 t('回答「要」→ 加上補牛奶 +$15', () => {
   const r = reply('要', { lastOrder: '特選馥郁那堤大杯去冰', pending: { add: '補牛奶' } });
@@ -111,6 +111,23 @@ t('冷萃硬要補 → 標示不能補、不收費', () => {
 });
 t('茶類只說少冰 → 反問需要補茶', () => assert.match(order('蜜柚紅茶少冰').ask.q, /補紅茶/));
 t('那堤去冰補滿 → 補牛奶', () => assert.ok(order('那堤去冰補滿').lines.some(l => l.id === 'ice_milk' && l.amount === 15)));
+
+console.log('店長第三輪回饋：濃縮咖啡');
+t('醇濃抹茶那堤不含濃縮：加特選濃縮＝加濃縮 +15＋特選豆 +15', () => {
+  const o = order('醇濃抹茶那堤去冰升級特選濃縮');
+  assert.equal(o.lines.find(l => l.id === 'esp_extra').amount, 15);
+  assert.equal(o.lines.find(l => l.id === 'esp_upgrade').amount, 15);
+  assert.equal(o.addTotal, 30);
+});
+t('醇濃抹茶那堤加一份一般濃縮 +15', () => assert.equal(order('冰醇濃抹茶那堤加一份濃縮').addTotal, 15));
+t('那堤（有濃縮）升級特選 +15', () => assert.equal(order('冰那堤升級特選').addTotal, 15));
+t('特選馥郁那堤再升級特選不加價', () => assert.equal(order('特選馥郁那堤升級特選').addTotal, 0));
+t('不含濃縮的飲品換低咖啡因 → 不適用', () => assert.equal(order('抹茶那堤換低咖啡因').lines[0].status, '不適用'));
+t('要補按鈕的版本：加上補牛奶後多 $15', () => {
+  const base = order('醇濃抹茶那堤大杯去冰');
+  const yes = buildOrder(normalize('醇濃抹茶那堤大杯去冰' + base.ask.add));
+  assert.equal(yes.basePrice + yes.addTotal - (base.basePrice + base.addTotal), 15);
+});
 
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {

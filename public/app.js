@@ -2,7 +2,7 @@
 // 聊天介面
 // =============================================================
 import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js';
-import { localReply, parseAiReply, money, matchTopics, normalize } from './engine.js';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js';
 import { renderHighlight, loadMenuImage } from './highlight.js';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
@@ -72,13 +72,13 @@ function milkTag(s) {
   const cls = s.hasMilk ? 'milk-yes' : (/有奶油|冰淇淋/.test(s.milk) ? 'milk-part' : 'milk-no');
   return `<span class="milk-tag ${cls}">${esc(s.milk)}</span>`;
 }
-function amountCell(a, blocked) {
-  if (blocked) return '<span class="amt unlisted">不能補</span>';
+function amountCell(a, status) {
+  if (status) return `<span class="amt unlisted">${esc(status)}</span>`;
   if (a == null) return '<span class="amt unlisted">未列價</span>';
   if (a === 0) return '<span class="amt">不加價</span>';
   return `<span class="amt"><mark class="price">${money(a)}</mark></span>`;
 }
-function renderOrder(o) {
+function renderOrder(o, opts = {}) {
   if (o.kind === 'multi') {
     return `<ul class="drink-list">${o.drinks.map(s => `
       <li class="drink-card">
@@ -98,7 +98,7 @@ function renderOrder(o) {
       ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
     </div>`;
   if (o.lines.length) {
-    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount, l.blocked)}</li>`).join('');
+    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount, l.status)}</li>`).join('');
     const total = o.basePrice != null
       ? `<p class="receipt-total"><span>合計（${esc(o.sizeLabel)}）</span><mark class="price">$${o.basePrice + o.addTotal}</mark></p>
          <p class="receipt-foot">飲品 $${o.basePrice}，加價 ${money(o.addTotal)}</p>`
@@ -115,7 +115,21 @@ function renderOrder(o) {
     html += `<p class="receipt-total solo"><span>${esc(o.sizeLabel)}</span><mark class="price">$${o.basePrice}</mark></p>`;
   }
   html += o.tips.map(t => `<p class="tip">${inline(t)}</p>`).join('');
-  if (o.ask) html += `<div class="ask"><p class="ask-q">${esc(o.ask.q)}</p><p class="ask-sub">${inline(o.ask.sub)}</p></div>`;
+  const ask = opts.ask || o.ask;
+  if (ask) {
+    const choice = opts.choice || null;
+    const sub = choice === 'yes' ? `已加上${ask.add} +$15，上面的價格已更新。`
+      : choice === 'no' ? '不補，維持原本菜單價格。' : ask.sub;
+    html += `
+      <div class="ask">
+        <p class="ask-q">${esc(ask.q)}</p>
+        <p class="ask-sub">${inline(sub)}</p>
+        <div class="ask-actions" role="group" aria-label="${esc(ask.q)}">
+          <button type="button" class="ask-btn" data-choice="yes" aria-pressed="${choice === 'yes'}">要補（+$15）</button>
+          <button type="button" class="ask-btn" data-choice="no" aria-pressed="${choice === 'no'}">不補</button>
+        </div>
+      </div>`;
+  }
   html += o.notes.map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
   return html;
 }
@@ -222,6 +236,7 @@ function botReply(r, userText) {
 
   if (r.orderText) state.lastOrder = r.orderText;
   state.pending = r.pending || null;
+  if (r.order?.kind === 'drink' && r.order.ask && r.orderText) setupAsk(row, r.order, r.orderText);
   if (r.topics?.length) state.lastTopics = r.topics;
   if (r.topics?.length || r.itemRegions?.length) {
     state.lastItemRegions = r.itemRegions || [];
@@ -229,6 +244,34 @@ function botReply(r, userText) {
   }
   state.history.push({ role: 'assistant', content: r.text });
   setChips(r.chips?.length ? r.chips : WELCOME_CHIPS.slice(0, 3), userText);
+}
+
+// 橘框裡的「要補／不補」：直接在同一張卡片切換價格
+function setupAsk(row, baseOrder, baseText) {
+  const bubble = row.querySelector('.bubble');
+  const ask = baseOrder.ask;
+  const yesText = baseText + ask.add;
+  const yesOrder = buildOrder(yesText);
+  if (!yesOrder || yesOrder.kind !== 'drink') return;
+  const draw = choice => {
+    const o = choice === 'yes' ? yesOrder : baseOrder;
+    bubble.innerHTML = renderOrder(o, { ask, choice });
+    bubble.querySelectorAll('.ask-btn').forEach(b => b.addEventListener('click', () => pick(b.dataset.choice)));
+  };
+  const pick = choice => {
+    draw(choice);
+    const o = choice === 'yes' ? yesOrder : baseOrder;
+    state.lastOrder = choice === 'yes' ? yesText : baseText;
+    state.pending = null;
+    state.lastItemRegions = o.regions;
+    state.lastTopics = o.topics.length ? o.topics : state.lastTopics;
+    state.lastWasQuote = true;
+    state.history.push(
+      { role: 'user', content: choice === 'yes' ? `要${ask.add}` : '不補' },
+      { role: 'assistant', content: orderToText(o) },
+    );
+  };
+  draw(null);
 }
 
 // ---------- AI ----------

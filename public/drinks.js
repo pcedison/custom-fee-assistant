@@ -187,3 +187,9 @@ export function refillType(d) {
   if (d.g === 'tea') return 'tea';
   return 'ask';
 }
+
+// 這杯本身有沒有濃縮咖啡（門市回饋：抹茶那堤、茶那堤等不含濃縮）
+//   有濃縮：濃縮咖啡類（那堤、美式、瑪奇朵…）、美式馥洛特、阿法奇朵
+//   沒有：茶、茶那堤、巧克力、星冰樂（咖啡星冰樂用的是咖啡，不是濃縮）、冷萃、每日精選、星沁爽、果汁
+export const hasEspresso = d => d.g === 'esp' || d.id === 946 || d.id === 948;
+export const isChoiceDrink = d => /特選/.test(d.n);

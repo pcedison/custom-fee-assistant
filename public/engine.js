@@ -2,7 +2,7 @@
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
 import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType } from './drinks.js';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -330,6 +330,7 @@ export function buildOrder(norm) {
 
   const pk = picks[0];
   const d = pk.drink;
+  const dn = pk.tempKnown ? d.n : baseName(d.n);
   let itemsText = fixed;
   for (const h of hits) itemsText = itemsText.slice(0, h.idx) + blank(itemsText.slice(h.idx, h.idx + h.len)) + itemsText.slice(h.idx + h.len);
 
@@ -353,8 +354,50 @@ export function buildOrder(norm) {
 
   if (d.nocustom && (items.length || sweet)) notes.push('官網註明：這款不提供客製化調整。');
 
+  // ---- 濃縮咖啡：先看這杯本身有沒有濃縮 ----
+  const up = items.find(f => f.item.id === 'esp_upgrade');
+  const ex = items.find(f => f.item.id === 'esp_extra');
+  const decaf = items.find(f => f.item.id === 'esp_decaf');
+  if (!hasEspresso(d)) {
+    if (up || ex) {
+      const shots = Math.max(up?.qty || 0, ex?.qty || 0, 1);
+      const x = shots > 1 ? ` ×${shots}` : '';
+      lines.push({ id: 'esp_extra', label: shots > 1 ? `加濃縮咖啡${x}` : '加一份濃縮咖啡', amount: 15 * shots });
+      extraRegions.push('esp_extra');
+      if (up) {
+        lines.push({ id: 'esp_upgrade', label: `特選豆${x}`, amount: 15 * shots });
+        extraRegions.push('esp_upgrade');
+        notes.push(shots > 1
+          ? `${dn}原本不含濃縮咖啡：每加一份特選濃縮＝加濃縮 +$15＋特選豆 +$15，${shots} 份一共 +$${30 * shots}。`
+          : `${dn}原本不含濃縮咖啡：要加特選濃縮＝加一份濃縮咖啡 +$15＋特選豆 +$15，一共 +$30。`);
+      } else {
+        notes.push(`${dn}原本不含濃縮咖啡，加一份一般濃縮咖啡 +$15${shots > 1 ? `，${shots} 份 +$${15 * shots}` : ''}。`);
+      }
+    }
+    if (decaf) {
+      lines.push({ id: 'esp_decaf', label: '低咖啡因', amount: null, status: '不適用' });
+      notes.push(`${dn}不含濃縮咖啡，沒有低咖啡因可以換。`);
+    }
+  } else {
+    if (up) {
+      const q = up.qty || 1;
+      if (isChoiceDrink(d)) {
+        lines.push({ id: 'esp_upgrade', label: '特選濃縮咖啡', amount: 0, status: '本來就是' });
+        notes.push(`${dn}本來就是特選濃縮咖啡，不用再升級。`);
+      } else {
+        lines.push({ id: 'esp_upgrade', label: `升級特選濃縮咖啡${q > 1 ? ` ×${q}` : ''}`, amount: 15 * q });
+      }
+    }
+    if (ex) {
+      const q = ex.qty || 1;
+      lines.push({ id: 'esp_extra', label: `多加一份濃縮咖啡${q > 1 ? ` ×${q}` : ''}`, amount: 15 * q });
+    }
+    if (decaf) lines.push({ id: 'esp_decaf', label: '低咖啡因', amount: 0 });
+  }
+
   for (const f of items) {
     const it = f.item;
+    if (it.group === 'esp') continue;
     let label = it.label;
     let amount = it.price;
     const qty = f.qty || 1;
@@ -375,7 +418,7 @@ export function buildOrder(norm) {
       } else if (rt === 'nocb') {
         amount = null; label = asMilk ? '補牛奶' : `補${d.fill || '冷萃'}`;
         notes.push(`冷萃類飲品不能補。${asMilk ? '想加牛奶請以門市為準。' : ''}`);
-        lines.push({ id: lineId, label, amount, blocked: true });
+        lines.push({ id: lineId, label, amount, blocked: true, status: '不能補' });
         continue;
       } else if (rt === null) {
         amount = null; label = asMilk ? '補牛奶' : '補飲料';
@@ -385,7 +428,7 @@ export function buildOrder(norm) {
         notes.push('圖表的「補奶類 +$15」是給少冰／去冰的飲品；正常冰想加牛奶，圖表沒有寫，請以門市為準。');
       } else if (asMilk) {
         label = milky ? `補${milkWord}（補奶類）` : '補牛奶（補奶類）';
-        if (!milky) notes.push(`${d.n}本身不含奶；補牛奶圖表同樣收 $15，能否這樣調整請以門市為準。`);
+        if (!milky) notes.push(`${dn}本身不含奶；補牛奶圖表同樣收 $15，能否這樣調整請以門市為準。`);
       } else {
         label = `補${d.fill || '飲料'}（補飲料）`;
         if (rt === 'ask') notes.push('這款能不能補飲料，請以門市為準。');
@@ -396,7 +439,7 @@ export function buildOrder(norm) {
     } else if (it.group === 'milk') {
       if (!milky) {
         amount = null;
-        notes.push(`${d.n}本身${MILK_LABEL[d.m]}，沒有奶類可以更換；想加奶請以門市為準。`);
+        notes.push(`${dn}本身${MILK_LABEL[d.m]}，沒有奶類可以更換；想加奶請以門市為準。`);
       } else if ((d.m === 'oat' && it.id === 'milk_oat') || (d.m === 'coconut' && it.id === 'milk_coco')) {
         amount = 0; label = `${it.label}（本來就是）`;
       }
@@ -406,7 +449,7 @@ export function buildOrder(norm) {
     } else if (it.group === 'protein') {
       const why = d.t === 'hot' ? '熱飲' : d.shaken ? '冰搖茶' : d.g === 'ref' ? '星沁爽' : d.g === 'frap' ? '星冰樂'
         : d.coldfoam ? 'Cold Foam 飲品' : d.g === 'juice' ? '果汁類' : d.g === 'float' ? '冰淇淋飲品' : '';
-      if (/蛋白雲朵/.test(d.n)) notes.push(`${d.n}本身就有高蛋白奶泡。`);
+      if (/蛋白雲朵/.test(d.n)) notes.push(`${dn}本身就有高蛋白奶泡。`);
       if (why) notes.push(`這杯是${why}，圖表建議避免搭配高蛋白雲朵。`);
     }
 
@@ -460,14 +503,14 @@ export function buildOrder(norm) {
       : { id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
   }
 
-  if (lines.some(l => l.amount == null && !l.blocked)) notes.push('標示「未列價」的項目沒有算進合計。');
+  if (lines.some(l => l.amount == null && !l.status)) notes.push('標示「未列價」的項目沒有算進合計。');
 
   let basePrice = null;
   if (sizeIdx != null) {
     basePrice = d.p[sizeIdx];
     if (basePrice == null) {
       const avail = d.p.map((p, i) => (p == null ? null : SIZE_LABEL[i])).filter(Boolean).join('、');
-      notes.push(`${d.n}沒有${SIZE_LABEL[sizeIdx]}，可選：${avail || '請洽門市'}。`);
+      notes.push(`${dn}沒有${SIZE_LABEL[sizeIdx]}，可選：${avail || '請洽門市'}。`);
     }
   }
   const addTotal = lines.reduce((sum, l) => sum + (l.amount || 0), 0);
@@ -500,7 +543,7 @@ function explainOrder(o) {
     : s.hasMilk
       ? `${s.name}是有奶的飲品（${s.comp}），所以少冰／去冰想補滿，補的是牛奶（補奶類）。`
       : `${s.name}不含奶（${s.comp}），所以少冰／去冰想補滿，補的是飲料本身，不是牛奶。`;
-  const rows = o.lines.map(l => `- ${l.label}：${l.blocked ? '不能補' : l.amount == null ? '圖表沒有列價格' : l.amount === 0 ? '不用加錢' : `多付 ${money(l.amount).replace('+', '')}`}`);
+  const rows = o.lines.map(l => `- ${l.label}：${l.status ? l.status : l.amount == null ? '圖表沒有列價格' : l.amount === 0 ? '不用加錢' : `多付 ${money(l.amount).replace('+', '')}`}`);
   return [head, ...rows, ...o.tips, ...(o.ask ? [`${o.ask.q}${o.ask.sub}`] : [])].join('\n');
 }
 
@@ -510,7 +553,7 @@ export function orderToText(o) {
   }
   const s = o.summary;
   const out = [`${s.name}：${s.milk}｜${s.comp}`, `價格：${s.prices}`];
-  o.lines.forEach(l => out.push(`- ${l.label} ${l.blocked ? '不能補' : l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount)}`));
+  o.lines.forEach(l => out.push(`- ${l.label} ${l.status || (l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount))}`));
   if (o.lines.length) out.push(`加價合計 ${money(o.addTotal)}`);
   if (o.basePrice != null) out.push(`**合計（${o.sizeLabel}）：$${o.basePrice + o.addTotal}**`);
   else if (o.lines.length) out.push(`含飲品：${o.sizeTotals.map(t => `${t.label} $${t.total}`).join('／')}`);
@@ -679,7 +722,6 @@ export function localReply(input, state = {}) {
       };
     }
     const chips = [];
-    if (order.ask) chips.push(order.ask.yes, '不用補');
     if (order.regions.length) chips.push('看不懂，標給我看');
     if (order.sizeIdx == null) chips.push('大杯呢？');
     if (!order.lines.some(l => l.id === 'eco')) chips.push('用環保杯呢？');
@@ -691,7 +733,7 @@ export function localReply(input, state = {}) {
       orderText,
       topics: order.topics.length ? order.topics : ['milk_list'],
       itemRegions: order.regions,
-      chips: chips.slice(0, order.ask ? 4 : 3),
+      chips: chips.slice(0, 3),
       markable: !!order.regions.length,
       pending: order.ask ? { add: order.ask.add } : null,
     };
