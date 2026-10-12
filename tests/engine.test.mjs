@@ -139,6 +139,42 @@ t('常見點法不會誤報看不懂', () => {
   }
 });
 
+console.log('模糊比對飲品名稱（店長第四輪）');
+t('「巧克力可可碎片加一份特選濃縮加一下香草糖漿」→ 巧克力可可碎片星冰樂，不是經典巧克力', () => {
+  const o = order('巧克力可可碎片加一份特選濃縮加一下香草糖漿');
+  assert.equal(o.drink.n, '巧克力可可碎片星冰樂');
+  assert.ok(!o.lines.some(l => l.id === 'o_cocoa'), '可可碎片是品名，不是加料');
+  assert.equal(o.addTotal, 45);
+  assert.ok(o.match.fuzzy && o.match.alts.some(a => a.name === '經典巧克力'));
+});
+t('點「經典巧克力」改選 → 經典巧克力＋可可碎片加料', () => {
+  const o0 = order('巧克力可可碎片加一份特選濃縮加一下香草糖漿');
+  const o = order(o0.match.alts.find(a => a.name === '經典巧克力').text);
+  assert.equal(o.summary.name.replace(/（.*$/, ''), '經典巧克力');
+  assert.ok(o.lines.some(l => l.id === 'o_cocoa'));
+});
+t('錯字：焦糖馬奇朵 → 焦糖瑪奇朵', () => assert.match(order('焦糖馬奇朵').summary.name, /^焦糖瑪奇朵/));
+t('漏字：巧克力碎片星冰樂、摩卡碎片星冰樂', () => {
+  assert.equal(order('巧克力碎片星冰樂').drink.n, '巧克力可可碎片星冰樂');
+  assert.equal(order('摩卡碎片星冰樂').drink.n, '摩卡可可碎片星冰樂');
+});
+t('一樣像 → 列出選項：可可碎片星冰樂', () => {
+  const o = order('可可碎片星冰樂');
+  assert.equal(o.kind, 'choose');
+  assert.equal(o.options.length, 3);
+});
+t('加料詞不會被當成飲品', () => {
+  assert.equal(order('冰那堤加可可碎片').drink.n, '冰那堤');
+  assert.equal(order('可可碎片要加錢嗎'), null);
+  assert.equal(order('高蛋白雲朵是什麼'), null);
+  assert.equal(order('抹茶要加錢嗎'), null);
+});
+t('飲品名裡的口味不會被當加料：我要焦糖瑪奇朵', () => assert.equal(order('我要焦糖瑪奇朵').lines.length, 0));
+t('常見別稱：冰黑糖拿鐵、桂花拿鐵', () => {
+  assert.equal(order('冰黑糖拿鐵').drink.n, '冰黑糖風味奶香咖啡');
+  assert.match(order('桂花拿鐵').summary.name, /^米香桂花那堤/);
+});
+
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {
   const r = reply('補飲料是什麼意思？');
