@@ -11,9 +11,16 @@
 //   OPENROUTER_API_KEY    選填（祕密），作為最後備援
 //   OPENROUTER_MODEL      選填，預設 openrouter/free
 //   ALLOWED_ORIGINS       選填，允許呼叫的其他網域，逗號分隔
+//   EMBED_MODEL           選填，語意分流用的向量模型，預設 @cf/baai/bge-m3
+//   ROUTE_ACCEPT / ROUTE_SOFT / ROUTE_MARGIN  選填，語意分流門檻（見 semantic.js）
+//
+// 請求可帶 route：
+//   { topics: [...] }   前端關鍵字找到預寫答案 → 先做語意比對，夠像回 { route: 'local' }，不夠像才叫 AI
+//   { clarify: true }   顧客在澄清上一題（「我意思是…」）→ 直接叫 AI，並提醒不要重複前一個回答
 // =============================================================
-import { buildSystemPrompt } from '../../public/kb.js';
+import { buildSystemPrompt, TOPICS } from '../../public/kb.js';
 import { dietFor } from '../../public/drinks.js';
+import { semanticRoute, brief } from './semantic.js';
 
 const MAX_TURNS = 8;
 const MAX_CHARS = 400;
@@ -49,6 +56,14 @@ export function cleanReply(text) {
     .replace(/^[\s\S]*?<\/think>/i, '')
     .trim()
     .slice(0, 2000);
+}
+
+const TOPIC_IDS = new Set(TOPICS.map(t => t.id));
+function sanitizeRoute(r) {
+  if (!r || typeof r !== 'object') return null;
+  const topics = Array.isArray(r.topics) ? r.topics.filter(t => typeof t === 'string' && TOPIC_IDS.has(t)).slice(0, 5) : [];
+  const clarify = r.clarify === true;
+  return topics.length || clarify ? { topics, clarify } : null;
 }
 
 function withTimeout(promise, ms = TIMEOUT_MS) {
@@ -121,23 +136,45 @@ export function providers(env) {
 export async function onRequestPost({ request, env }) {
   if (!originAllowed(request, env)) return json({ error: 'forbidden' }, 403);
   const list = providers(env);
-  if (!list.length) return json({ error: 'missing_key' }, 503);
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'bad_request' }, 400); }
   const messages = sanitize(body?.messages);
   if (!messages.length || messages[messages.length - 1].role !== 'user') return json({ error: 'bad_request' }, 400);
+  const route = sanitizeRoute(body?.route);
+  const question = messages[messages.length - 1].content;
+
+  // 語意分流：關鍵字找到預寫答案時，先確認它真的回答到顧客問的
+  let sem = null;
+  if (route && !route.clarify && route.topics.length) {
+    if (!env.AI) return json({ route: 'local', sem: null }); // 沒有向量模型就維持原本做法
+    try {
+      sem = await withTimeout(semanticRoute(env, question, route.topics), 8000);
+      console.log(JSON.stringify({ evt: 'route', q: question.slice(0, 80), hint: route.topics, ...brief(sem) }));
+      if (sem.local) return json({ route: 'local', sem: brief(sem) });
+    } catch (e) {
+      console.log('[route] embedding failed:', e.message);
+      return json({ route: 'local', sem: null });
+    }
+  }
+
+  if (!list.length) return json({ error: 'missing_key' }, 503);
 
   // 不含奶／牛奶過敏的推薦題：只給 AI 看不含奶的飲品，避免推薦到含奶的
   const diet = dietFor(messages);
-  const system = buildSystemPrompt({ diet: diet.recommend ? diet.diet : null });
+  const system = buildSystemPrompt({
+    diet: diet.recommend ? diet.diet : null,
+    focus: route ? { topics: route.topics, clarify: route.clarify } : null,
+    // 收費規則的問題（不是點單）不需要整份飲品資料，提示短很多、回得更快
+    slim: !!(route && !route.clarify && route.topics.length),
+  });
   const origin = new URL(request.url).origin;
   let lastCode = 'upstream';
   for (const [name, call] of list) {
     try {
       const { text, model } = await call(env, system, messages, origin);
       const reply = cleanReply(text);
-      if (reply) return json({ reply, provider: name, model });
+      if (reply) return json({ reply, provider: name, model, route: route ? 'ai' : undefined, sem: sem ? brief(sem) : undefined });
       lastCode = 'empty';
     } catch (e) {
       lastCode = e.code || (e.message === 'timeout' ? 'timeout' : 'upstream');

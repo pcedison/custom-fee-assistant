@@ -1,8 +1,10 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
-import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixFacts, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
+import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
 import { DRINKS, dietSafe } from '../public/drinks.js';
-import { buildSystemPrompt } from '../public/kb.js';
+import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
+import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
+import { onRequestPost } from '../functions/api/chat.js';
 import { REGIONS, TOPICS, ITEMS } from '../public/kb.js';
 
 let pass = 0;
@@ -331,5 +333,81 @@ t('正確的說法不動', () => {
   const ok = '冷萃咖啡是用冷水浸泡萃取，不是濃縮咖啡。美式是濃縮咖啡加水。冷萃也可以升級特選，加濃縮 +$15。';
   assert.equal(fixFacts(ok), ok);
 });
+
+console.log('語意分流');
+const TH = { hard: 0.82, soft: 0.7, margin: 0.05 };
+const sc = (topic, score) => ({ topic, score, text: topic });
+t('很像預寫答案能回答的問法 → 用預寫答案', () => {
+  assert.equal(decideRoute([sc('eco', 0.9), sc('_near', 0.6)], ['eco'], TH).local, true);
+});
+t('比較像「沒回答到」的問法 → 交給 AI', () => {
+  assert.equal(decideRoute([sc('eco', 0.74), sc('_near', 0.88)], ['eco'], TH).local, false);
+});
+t('都不夠像 → 交給 AI', () => {
+  assert.equal(decideRoute([sc('eco', 0.6), sc('_near', 0.5)], ['eco'], TH).local, false);
+});
+t('最像的是別的主題 → 交給 AI', () => {
+  assert.equal(decideRoute([sc('eco', 0.75), sc('bogo', 0.8), sc('_near', 0.5)], ['eco'], TH).local, false);
+});
+t('例句都對得到主題，且沒有重複', () => {
+  const ids = new Set(TOPICS.map(x => x.id));
+  for (const k of Object.keys(ROUTE_EXAMPLES)) assert.ok(ids.has(k), k);
+  const texts = BANK.map(b => b.text);
+  assert.equal(new Set(texts).size, texts.length);
+  assert.ok(ROUTE_NEAR_MISS.length >= 10);
+});
+t('「我意思是／我是問」算澄清，不算看不懂', () => {
+  assert.ok(isClarify('我意思是，環保杯有限定是用保溫杯還是塑膠杯？'));
+  assert.ok(isClarify('我是問保溫杯可不可以'));
+  assert.ok(!isClarify('補飲料是什麼意思？'));
+  const r = reply('我意思是，環保杯有限定是用保溫杯還是塑膠杯？', { lastTopics: ['eco'] });
+  assert.ok(!r?.regions && !/這部分是門市規則/.test(r?.text || ''));
+});
+t('關鍵字找到的預寫答案會標記 faq（要先做語意確認）', () => {
+  assert.deepEqual(reply('用環保杯可以折嗎？').faq, ['eco']);
+  assert.equal(reply('冰那堤去冰').faq, undefined);
+  assert.equal(reply('燕麥奶加抹茶液多少').faq, undefined);
+});
+
+// 假的向量模型：用字的二元組當特徵，夠測流程
+function fakeAI(log = []) {
+  const vec = s => {
+    const v = new Array(256).fill(0);
+    const t = String(s).replace(/[？?，,。！!\s]/g, '');
+    for (let i = 0; i < t.length - 1; i++) { let h = 0; for (const c of t.slice(i, i + 2)) h = (h * 31 + c.codePointAt(0)) >>> 0; v[h % 256] += 1; }
+    return v;
+  };
+  return {
+    run: async (model, input) => {
+      log.push(model);
+      if (/bge-m3/.test(model)) return { shape: [input.text.length, 256], data: input.text.map(vec) };
+      return { response: '圖表沒有規定環保杯的材質，保溫杯、塑膠隨行杯能不能用，請以門市夥伴說明為準。' };
+    },
+  };
+}
+const post = async (env, body) => {
+  const r = await onRequestPost({ request: new Request('https://x.dev/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), env });
+  return r.json();
+};
+await (async () => {
+  const calls = [];
+  const env = { AI: fakeAI(calls), ROUTE_ACCEPT: '0.9', ROUTE_SOFT: '0.5', ROUTE_MARGIN: '0.02' };
+  resetBank();
+  const a = await post(env, { messages: [{ role: 'user', content: '用環保杯可以折嗎？' }], route: { topics: ['eco'] } });
+  t('後端：問法夠像 → 回 route local，不叫 AI', () => {
+    assert.equal(a.route, 'local');
+    assert.ok(!calls.some(m => /qwen/.test(m)));
+  });
+  const b = await post(env, { messages: [{ role: 'user', content: '環保杯有限定是用保溫杯還是塑膠杯？' }], route: { topics: ['eco'] } });
+  t('後端：問法像「沒回答到」的例句 → 交給 AI 回答', () => {
+    assert.equal(b.route, 'ai');
+    assert.ok(/門市夥伴/.test(b.reply));
+    assert.ok(b.sem.near > b.sem.score, JSON.stringify(b.sem));
+  });
+  const c = await post({ AI: fakeAI() }, { messages: [{ role: 'user', content: 'x' }, { role: 'assistant', content: 'y' }, { role: 'user', content: '我意思是保溫杯可以嗎' }], route: { clarify: true, topics: ['eco'] } });
+  t('後端：澄清 → 直接叫 AI', () => assert.ok(c.reply && c.route === 'ai'));
+  const d = await post({}, { messages: [{ role: 'user', content: '用環保杯可以折嗎？' }], route: { topics: ['eco'] } });
+  t('後端：沒有 Workers AI → 維持預寫答案', () => assert.equal(d.route, 'local'));
+})();
 
 console.log(`\n${pass} 項通過`);
