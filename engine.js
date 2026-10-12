@@ -2,6 +2,7 @@
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
 import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk } from './drinks.js';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -67,12 +68,12 @@ export function matchTopics(norm) {
 const ITEM_NAMES = ITEMS
   .flatMap(it => it.names.map(n => (typeof n === 'string'
     ? { n: normalize(n), add: false, it }
-    : { n: normalize(n.n), add: !!n.add, it })))
+    : { n: normalize(n.n), add: !!n.add, verbOnly: !!n.verb, tag: n.tag || '', it })))
   .sort((a, b) => b.n.length - a.n.length);
 const ALL_NAMES = ITEM_NAMES.map(x => x.n).filter(n => n.length >= 2);
 
 const VERB = '(?:多加|再加|另加|加|多|要|換成|換|升級|來|點)';
-const UNIT = '(?:份|個|次|種|shot)';
+const UNIT = '(?:份|個|次|種|匙|下|shot)';
 const RE_QTY_BEFORE = new RegExp(NUM + UNIT + '(?:的)?$');
 const RE_VERB_BEFORE = new RegExp(VERB + '(?:' + NUM + UNIT + ')?$');
 const RE_NEG_BEFORE = /(不|沒|沒有|免|別|勿|不用|不要)(加|要|用|補)?$/;
@@ -86,7 +87,7 @@ function startsWithItem(rest) {
 export function extractItems(norm) {
   let work = stripDrinks(norm);
   const found = new Map();
-  for (const { n, add, it } of ITEM_NAMES) {
+  for (const { n, add, verbOnly, tag, it } of ITEM_NAMES) {
     let idx = work.indexOf(n);
     while (idx !== -1) {
       const before = work.slice(Math.max(0, idx - 5), idx);
@@ -99,10 +100,18 @@ export function extractItems(norm) {
         if (ma && !startsWithItem(afterAll.slice(ma[0].length))) qty = parseNum(ma[1]);
       }
       const negated = RE_NEG_BEFORE.test(before);
-      const hasVerb = RE_VERB_BEFORE.test(before);
-      if (!negated && (!add || hasVerb || qty != null)) {
+      const mv = before.match(RE_VERB_BEFORE);
+      const hasVerb = !!mv;
+      const ok = !add || hasVerb || (!verbOnly && qty != null);
+      if (!negated && ok) {
         const prev = found.get(it.id);
-        found.set(it.id, { item: it, qty: Math.max(prev?.qty || 0, qty || 1), askedQty: qty });
+        found.set(it.id, {
+          item: it,
+          qty: Math.max(prev?.qty || 0, qty || 1),
+          askedQty: qty,
+          tag: prev?.tag || tag,
+          swap: /^換/.test(mv?.[0] || ''),
+        });
       }
       work = work.slice(0, idx) + blank(n) + work.slice(idx + n.length);
       idx = work.indexOf(n, idx + n.length);
@@ -214,6 +223,271 @@ export function quoteToText(q) {
 }
 
 // ---------------------------------------------------------------
+// 飲品辨識與點單試算
+// ---------------------------------------------------------------
+export function fixNames(norm) {
+  let s = norm;
+  for (const [re, to] of NAME_FIXES) s = s.replace(re, to);
+  return s;
+}
+// 「冰那堤」「熱蜜柚紅茶」→ 去掉冷熱字；「冰搖紅茶」的冰是品名一部分，不去掉
+const baseName = n => n.replace(/^熱/, '').replace(/^冰(?!搖)/, '');
+const BASES = new Map();
+for (const d of DRINKS) {
+  const b = baseName(d.n);
+  if (!BASES.has(b)) BASES.set(b, []);
+  BASES.get(b).push(d);
+}
+const SIZE_LABEL = ['短杯', '中杯', '大杯', '特大杯'];
+const SIZE_IDX = { 短杯: 0, short: 0, 中杯: 1, tall: 1, 大杯: 2, grande: 2, 特大杯: 3, venti: 3 };
+const RE_SIZE = /(特大杯|短杯|中杯|大杯|venti|grande|tall|short)/;
+const MILK_NAME = { dairy: '鮮奶', oat: '燕麥奶', coconut: '椰奶' };
+
+// 看起來像飲品名、其實是加料的詞：先吃掉，避免「摩卡醬」被當成「摩卡」
+const ADDON_BLOCK = ['摩卡醬', '摩卡風味淋醬', '摩卡淋醬', '焦糖醬', '焦糖風味淋醬', '焦糖淋醬', '焦糖糖漿', '鹹焦糖糖漿',
+  '香草糖漿', '榛果糖漿', '可可碎片', '抹茶液', '抹茶粉', '福吉茶粉', '蜂蜜紅柚醬', '紅柚醬', '蜜柚醬',
+  '星冰樂咖啡液', '咖啡液', '高蛋白雲朵', '濃縮咖啡'];
+
+const DRINK_KEYS = (() => {
+  const keys = new Map();
+  const add = (k, base) => { k = normalize(k); if (k.length >= 2 && !keys.has(k)) keys.set(k, base); };
+  for (const base of BASES.keys()) {
+    add(base, base);
+    (DRINK_ALIASES[base] || []).forEach(a => add(a, base));
+    if (base.endsWith('咖啡') && base.length > 4) add(base.slice(0, -2), base);
+    if (base.includes('風味')) add(base.replace('風味', ''), base);
+  }
+  add('燕麥那堤', '特選燕麥奶那堤');
+  add('燕麥奶那堤', '特選燕麥奶那堤');
+  const list = [...keys.entries()].map(([k, base]) => ({ k, base }));
+  ADDON_BLOCK.forEach(k => list.push({ k, base: null }));
+  return list.sort((a, b) => b.k.length - a.k.length);
+})();
+
+export function findDrinks(fixed) {
+  let work = fixed;
+  const hits = [];
+  for (const { k, base } of DRINK_KEYS) {
+    let idx = work.indexOf(k);
+    while (idx !== -1) {
+      if (base) hits.push({ base, idx, len: k.length });
+      work = work.slice(0, idx) + blank(k) + work.slice(idx + k.length);
+      idx = work.indexOf(k, idx + k.length);
+    }
+  }
+  hits.sort((a, b) => a.idx - b.idx);
+  const seen = new Set();
+  return hits.filter(h => (seen.has(h.base) ? false : seen.add(h.base)));
+}
+
+function pickVariant(base, fixed, idx) {
+  const vs = BASES.get(base);
+  if (vs.length === 1) return { drink: vs[0], alt: null, tempKnown: true };
+  const iced = vs.find(d => d.t === 'iced');
+  const hot = vs.find(d => d.t === 'hot');
+  const prev = fixed[idx - 1];
+  let want = null;
+  if (prev === '冰') want = 'iced';
+  else if (prev === '熱' || prev === '溫') want = 'hot';
+  else if (/(少冰|去冰|微冰|正常冰|多冰|冰塊|冰的)/.test(fixed)) want = 'iced';
+  else if (/(熱的|熱飲|溫的|做熱|要熱)/.test(fixed)) want = 'hot';
+  if (want === 'iced' && iced) return { drink: iced, alt: hot, tempKnown: true };
+  if (want === 'hot' && hot) return { drink: hot, alt: iced, tempKnown: true };
+  return { drink: iced || hot || vs[0], alt: iced ? hot : null, tempKnown: false };
+}
+
+const RE_SWEET = /(?:^|[^加多])((?:\d|[一二兩三四五六七八九十半])下(?:糖漿|糖)|(?:糖漿|糖)(?:\d|[一二兩三四五六七八九十半])下|半糖|微糖|少糖|減糖|無糖|去糖|不要糖|不加糖|不要加糖|少甜|微甜|無甜|不要甜)/;
+export function matchSweet(text) {
+  const m = text.match(RE_SWEET);
+  return m ? m[1] : null;
+}
+
+const GROUP_TOPIC2 = { ice: 'ice', esp: 'espresso', milk: 'milk', syrup: 'syrup', other: 'other', protein: 'protein' };
+
+function drinkSummary(pk) {
+  const d = pk.drink;
+  const sizes = d.p.map((p, i) => (p == null ? null : `${SIZE_LABEL[i]} $${p}`)).filter(Boolean);
+  const altPrice = pk.alt && pk.alt.p.join() !== d.p.join();
+  return {
+    name: pk.tempKnown ? d.n : `${baseName(d.n)}（${pk.alt ? '冰／熱' : d.n}）`.replace(/（(.+)）$/, (m, x) => (x === d.n ? '' : `（${x}）`)),
+    milk: MILK_LABEL[d.m],
+    hasMilk: hasMilk(d),
+    comp: d.c,
+    prices: sizes.join('／') || '價格請洽門市',
+    altNote: altPrice ? `${pk.alt.n}：${pk.alt.p.map((p, i) => (p == null ? null : `${SIZE_LABEL[i]} $${p}`)).filter(Boolean).join('／')}` : '',
+    info: [d.note, d.season ? '季節限定，依門市供應為準' : ''].filter(Boolean).join('；'),
+  };
+}
+
+export function buildOrder(norm) {
+  const fixed = fixNames(norm);
+  const hits = findDrinks(fixed);
+  if (!hits.length) return null;
+  const picks = hits.map(h => ({ ...pickVariant(h.base, fixed, h.idx), hit: h }));
+  if (picks.length > 1) {
+    return { kind: 'multi', drinks: picks.slice(0, 4).map(drinkSummary) };
+  }
+
+  const pk = picks[0];
+  const d = pk.drink;
+  let itemsText = fixed;
+  for (const h of hits) itemsText = itemsText.slice(0, h.idx) + blank(itemsText.slice(h.idx, h.idx + h.len)) + itemsText.slice(h.idx + h.len);
+
+  const items = extractItems(itemsText);
+  const eco = detectEco(itemsText);
+  const bogo = detectBogo(itemsText);
+  const sm = itemsText.match(RE_SIZE);
+  const sizeIdx = sm ? SIZE_IDX[sm[1]] : null;
+  const sweet = matchSweet(itemsText);
+  const ids = items.map(f => f.item.id);
+  const iceLess = ids.includes('ice_less');
+  const refill = ids.includes('ice_milk') || ids.includes('ice_drink');
+  const milky = hasMilk(d);
+  const lines = [];
+  const notes = [];
+  const tips = [];
+  const extraRegions = [];
+
+  if (d.nocustom && (items.length || sweet)) notes.push('官網註明：這款不提供客製化調整。');
+
+  for (const f of items) {
+    const it = f.item;
+    let label = it.label;
+    let amount = it.price;
+    const qty = f.qty || 1;
+
+    if (it.id === 'ice_less') {
+      if (d.t === 'hot') { notes.push('熱飲沒有冰塊，不需要調整冰量。'); continue; }
+      if (d.noice) { notes.push('官網註明：這款不開放冰塊、甜度調整。'); continue; }
+      if (d.t === 'blended') notes.push('冰沙類飲品的冰量調整，請以門市為準。');
+      label = (itemsText.match(/少冰|去冰|微冰|不要冰|無冰/) || ['少冰／去冰'])[0];
+    } else if (it.id === 'ice_milk') {
+      if (d.t === 'hot') {
+        amount = null; label = '補奶類';
+        notes.push('補奶類是給少冰／去冰的冰飲；熱飲想多加牛奶，請以門市為準。');
+      } else if (f.tag === 'addmilk' && !iceLess) {
+        amount = null; label = '加牛奶';
+        notes.push('圖表的「補奶類 +$15」是給少冰／去冰的飲品；正常冰想加牛奶，圖表沒有寫，請以門市為準。');
+      } else {
+        label = milky ? `補奶類（補${MILK_NAME[d.m]}）` : '補奶類（補牛奶）';
+        if (!milky) notes.push(`${d.n}本身不含奶，一般補的是飲料（${d.fill || '飲料'}）；要改補牛奶，圖表同樣收 $15。`);
+      }
+    } else if (it.id === 'ice_drink') {
+      label = `補飲料（補${d.fill || '飲料'}）`;
+      if (d.t === 'hot') { amount = null; notes.push('補飲料是給少冰／去冰的冰飲。'); }
+    } else if (it.group === 'milk') {
+      if (!milky) {
+        amount = null;
+        notes.push(`${d.n}本身${MILK_LABEL[d.m]}，沒有奶類可以更換；想加奶請以門市為準。`);
+      } else if ((d.m === 'oat' && it.id === 'milk_oat') || (d.m === 'coconut' && it.id === 'milk_coco')) {
+        amount = 0; label = `${it.label}（本來就是）`;
+      }
+    } else if (it.group === 'syrup' && f.swap) {
+      amount = 0; label = `換成${it.label}`;
+      notes.push('官網客製化頁：更換飲料原有的風味糖漿不另收費，額外添加才收 $15。');
+    } else if (it.group === 'protein') {
+      const why = d.t === 'hot' ? '熱飲' : d.shaken ? '冰搖茶' : d.g === 'ref' ? '星沁爽' : d.g === 'frap' ? '星冰樂'
+        : d.coldfoam ? 'Cold Foam 飲品' : d.g === 'juice' ? '果汁類' : d.g === 'float' ? '冰淇淋飲品' : '';
+      if (/蛋白雲朵/.test(d.n)) notes.push(`${d.n}本身就有高蛋白奶泡。`);
+      if (why) notes.push(`這杯是${why}，圖表建議避免搭配高蛋白雲朵。`);
+    }
+
+    if (amount != null && amount !== 0) {
+      if (it.perServing) {
+        amount = it.price * qty;
+        if (qty > 1) label = `${label} ×${qty}`;
+      } else if (it.id === 'syrup_any' && qty > 1) {
+        amount = it.price * qty; label = `風味糖漿 ×${qty} 種`;
+      } else if (it.limitOne && qty > 1) {
+        notes.push(`${it.label}每杯每項限一份，已以 1 份計算。`);
+      }
+    }
+    if (it.id === 'o_matcha' && f.tag === 'powder') notes.push('圖表列的是「抹茶液」：加一份 $15，每杯限一份。');
+    lines.push({ id: it.id, label, amount });
+  }
+
+  if (sweet) {
+    lines.push({ id: 'sweet', label: `調整甜度（${sweet}）`, amount: null });
+    if (d.noice) { /* 冰雪星沁爽：上面已提醒不開放甜度調整 */ }
+    else if (d.sauce) {
+      const sauceName = d.sauce.split('為維持')[0];
+      notes.push(`調整甜度圖表沒有列價格。這杯的甜味來自${sauceName}，官網註明${sauceName}為維持風味最少 1 匙。`);
+    } else {
+      notes.push('調整甜度圖表沒有列價格（圖上標示「調整甜度 風味不變」），請以門市為準。');
+    }
+    extraRegions.push('sweet_btn');
+  }
+
+  if (iceLess && !refill && d.t !== 'hot' && !d.noice) {
+    tips.push(milky
+      ? `想把空間補滿：這杯有奶，選「補奶類（補${MILK_NAME[d.m]}）」+$15。`
+      : `想把空間補滿：這杯不含奶，選「補飲料（補${d.fill || '飲料'}）」+$15，不會用到補奶類。`);
+    extraRegions.push(milky ? 'ice_milk' : 'ice_drink', 'ice_note2');
+  }
+
+  if (eco) {
+    lines.push(bogo
+      ? { id: 'eco', label: '自備環保杯（買一送一不折抵）', amount: 0 }
+      : { id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
+  }
+
+  if (lines.some(l => l.amount == null)) notes.push('標示「未列價」的項目沒有算進合計。');
+
+  let basePrice = null;
+  if (sizeIdx != null) {
+    basePrice = d.p[sizeIdx];
+    if (basePrice == null) {
+      const avail = d.p.map((p, i) => (p == null ? null : SIZE_LABEL[i])).filter(Boolean).join('、');
+      notes.push(`${d.n}沒有${SIZE_LABEL[sizeIdx]}，可選：${avail || '請洽門市'}。`);
+    }
+  }
+  const addTotal = lines.reduce((sum, l) => sum + (l.amount || 0), 0);
+  const sizeTotals = d.p.map((p, i) => (p == null ? null : { label: SIZE_LABEL[i], total: p + addTotal })).filter(Boolean);
+
+  const topicIds = uniq([
+    ...items.map(f => (f.item.id === 'o_matcha' ? 'matcha' : GROUP_TOPIC2[f.item.group])),
+    eco ? 'eco' : null, sweet ? 'sweetness' : null,
+  ].filter(Boolean));
+
+  return {
+    kind: 'drink',
+    summary: drinkSummary(pk),
+    drink: d,
+    tempKnown: pk.tempKnown,
+    sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
+    basePrice, lines, addTotal, sizeTotals, notes, tips,
+    regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
+    topics: topicIds,
+    fixed,
+    hasExtras: lines.length > 0,
+  };
+}
+
+function explainOrder(o) {
+  const s = o.summary;
+  const head = s.hasMilk
+    ? `${s.name}是有奶的飲品（${s.comp}），所以少冰／去冰想補滿，補的是奶類。`
+    : `${s.name}不含奶（${s.comp}），所以少冰／去冰想補滿，補的是飲料本身，不是牛奶。`;
+  const rows = o.lines.map(l => `- ${l.label}：${l.amount == null ? '圖表沒有列價格' : l.amount === 0 ? '不用加錢' : `多付 ${money(l.amount).replace('+', '')}`}`);
+  return [head, ...rows, ...o.tips].join('\n');
+}
+
+export function orderToText(o) {
+  if (o.kind === 'multi') {
+    return o.drinks.map(s => `${s.name}：${s.milk}｜${s.comp}｜${s.prices}`).join('\n');
+  }
+  const s = o.summary;
+  const out = [`${s.name}：${s.milk}｜${s.comp}`, `價格：${s.prices}`];
+  o.lines.forEach(l => out.push(`- ${l.label} ${l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount)}`));
+  if (o.lines.length) out.push(`加價合計 ${money(o.addTotal)}`);
+  if (o.basePrice != null) out.push(`**合計（${o.sizeLabel}）：$${o.basePrice + o.addTotal}**`);
+  else if (o.lines.length) out.push(`含飲品：${o.sizeTotals.map(t => `${t.label} $${t.total}`).join('／')}`);
+  o.tips.forEach(t => out.push(t));
+  o.notes.forEach(n => out.push(`⚠️ ${n}`));
+  return out.join('\n');
+}
+
+// ---------------------------------------------------------------
 // 看不懂／想看圖
 // ---------------------------------------------------------------
 const RE_CONFUSED = /(看不懂|聽不懂|不懂|沒懂|不太懂|搞不懂|不明白|不了解|不理解|不清楚|看不清|什麼意思|甚麼意思|啥意思|意思是|是指|指什麼|是什麼|是甚麼|什麼是|甚麼是|是啥|哪裡|在哪|圖上|標出|標給|標示|畫給|圈出|指給|給我看|霧煞煞|解釋|霧沙沙)/;
@@ -266,6 +540,20 @@ export function localReply(input, state = {}) {
       ? uniq(itemRegions)
       : uniq([...withImg.flatMap(t => t.regions), ...itemRegions]);
 
+    // 上一則是飲品試算：用那杯飲品的情況來解釋
+    const lastOrder = (fromContext && state.lastOrder) ? buildOrder(state.lastOrder) : null;
+    if (lastOrder && lastOrder.kind === 'drink' && lastOrder.regions.length) {
+      return {
+        source: 'local',
+        text: explainOrder(lastOrder),
+        regions: lastOrder.regions,
+        caption: '圖上相關的地方用橘色螢光筆標起來了，點圖可以放大。',
+        topics: lastOrder.topics,
+        itemRegions: lastOrder.regions,
+        chips: ['哪些飲料有牛奶？', '用環保杯呢？'],
+      };
+    }
+
     if (regions.length) {
       const parts = withImg.map(t => t.simple);
       if (!parts.length && quote.items.length) parts.push(quoteToText(quote));
@@ -313,6 +601,46 @@ export function localReply(input, state = {}) {
       };
     }
     return null;
+  }
+
+  // 有提到飲品：依那杯飲品回答（含不含奶、價格、加價）
+  let order = buildOrder(norm);
+  let orderText = order ? fixNames(norm) : null;
+  if (!order && state.lastOrder && norm.length <= 24) {
+    const fx = fixNames(norm);
+    const hasNew = RE_SIZE.test(fx) || extractItems(fx).length || detectEco(fx) || matchSweet(fx);
+    if (hasNew) {
+      const prev = RE_SIZE.test(fx) ? state.lastOrder.replace(new RegExp(RE_SIZE.source, 'g'), '') : state.lastOrder;
+      orderText = prev + fx;
+      order = buildOrder(orderText);
+    }
+  }
+  if (order) {
+    if (order.kind === 'multi') {
+      return {
+        source: 'local',
+        text: orderToText(order),
+        order,
+        topics: [],
+        chips: ['哪些飲料有牛奶？', ...order.drinks.slice(0, 2).map(x => `${x.name.replace(/（.*$/, '')}去冰補滿多少？`)],
+      };
+    }
+    const base = order.summary.name.replace(/（.*$/, '');
+    const chips = [];
+    if (order.regions.length) chips.push('看不懂，標給我看');
+    if (order.sizeIdx == null) chips.push('大杯呢？');
+    if (!order.lines.some(l => l.id === 'eco')) chips.push('用環保杯呢？');
+    chips.push('哪些飲料有牛奶？');
+    return {
+      source: 'local',
+      text: orderToText(order),
+      order,
+      orderText,
+      topics: order.topics.length ? order.topics : ['milk_list'],
+      itemRegions: order.regions,
+      chips: chips.slice(0, 3),
+      markable: !!order.regions.length,
+    };
   }
 
   if (showQuote) {

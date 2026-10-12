@@ -31,6 +31,7 @@ const state = {
   lastTopics: [],
   lastItemRegions: [],
   lastWasQuote: false,
+  lastOrder: null,
   busy: false,
   latestShot: null,
 };
@@ -66,6 +67,56 @@ function renderText(text) {
     ? `<ul>${part.map(li => `<li>${inline(li)}</li>`).join('')}</ul>`
     : `<p${/^⚠️/.test(part) ? ' class="note"' : ''}>${inline(part)}</p>`).join('');
 }
+function milkTag(s) {
+  const cls = s.hasMilk ? 'milk-yes' : (/有奶油|冰淇淋/.test(s.milk) ? 'milk-part' : 'milk-no');
+  return `<span class="milk-tag ${cls}">${esc(s.milk)}</span>`;
+}
+function amountCell(a) {
+  if (a == null) return '<span class="amt unlisted">未列價</span>';
+  if (a === 0) return '<span class="amt">不加價</span>';
+  return `<span class="amt"><mark class="price">${money(a)}</mark></span>`;
+}
+function renderOrder(o) {
+  if (o.kind === 'multi') {
+    return `<ul class="drink-list">${o.drinks.map(s => `
+      <li class="drink-card">
+        <div class="drink-row"><p class="drink-name">${esc(s.name)}</p>${milkTag(s)}</div>
+        <p class="drink-comp">${esc(s.comp)}</p>
+        <p class="drink-prices">${esc(s.prices)}</p>
+      </li>`).join('')}</ul>
+      <p class="note">加價試算請一杯一杯問，例如「${esc(o.drinks[0].name.replace(/（.*$/, ''))}去冰補滿大杯」。</p>`;
+  }
+  const s = o.summary;
+  let html = `
+    <div class="drink-card">
+      <div class="drink-row"><p class="drink-name">${esc(s.name)}</p>${milkTag(s)}</div>
+      <p class="drink-comp">${esc(s.comp)}</p>
+      <p class="drink-prices">${esc(s.prices)}</p>
+      ${s.altNote ? `<p class="drink-info">${esc(s.altNote)}</p>` : ''}
+      ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
+    </div>`;
+  if (o.lines.length) {
+    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount)}</li>`).join('');
+    const total = o.basePrice != null
+      ? `<p class="receipt-total"><span>合計（${esc(o.sizeLabel)}）</span><mark class="price">$${o.basePrice + o.addTotal}</mark></p>
+         <p class="receipt-foot">飲品 $${o.basePrice}，加價 ${money(o.addTotal)}</p>`
+      : `<p class="receipt-total"><span>加價</span><mark class="price">${money(o.addTotal)}</mark></p>
+         <p class="receipt-sizes">${o.sizeTotals.map(t => `<span>${esc(t.label)} <b>$${t.total}</b></span>`).join('')}</p>
+         <p class="receipt-foot">上面是含飲品的總價，實際以門市結帳為準。</p>`;
+    html += `
+      <div class="receipt">
+        <p class="receipt-title">加價明細</p>
+        <ul class="receipt-lines">${rows}</ul>
+        ${total}
+      </div>`;
+  } else if (o.basePrice != null) {
+    html += `<p class="receipt-total solo"><span>${esc(o.sizeLabel)}</span><mark class="price">$${o.basePrice}</mark></p>`;
+  }
+  html += o.tips.map(t => `<p class="tip">${inline(t)}</p>`).join('');
+  html += o.notes.map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
+  return html;
+}
+
 function renderQuote(q) {
   const rows = q.lines.map(l => `
     <li><span>${esc(l.label)}</span><span class="amt">${l.amount === 0 ? '不加價' : `<mark class="price">${money(l.amount)}</mark>`}</span></li>`).join('');
@@ -159,17 +210,18 @@ async function attachImage(row, { regions, plain, caption }) {
 }
 
 function botReply(r, userText) {
-  const body = (r.quote ? renderQuote(r.quote) : renderText(r.text));
+  const body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
   const meta = r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆';
   const row = addMessage('bot', body, meta);
 
   if (r.regions?.length) attachImage(row, { regions: r.regions, caption: r.caption });
   else if (r.plainImage) attachImage(row, { plain: true, caption: '點圖可以放大。' });
 
+  if (r.orderText) state.lastOrder = r.orderText;
   if (r.topics?.length) state.lastTopics = r.topics;
   if (r.topics?.length || r.itemRegions?.length) {
     state.lastItemRegions = r.itemRegions || [];
-    state.lastWasQuote = !!r.quote;
+    state.lastWasQuote = !!(r.quote || r.order);
   }
   state.history.push({ role: 'assistant', content: r.text });
   setChips(r.chips?.length ? r.chips : WELCOME_CHIPS.slice(0, 3), userText);
@@ -305,6 +357,6 @@ loadMenuImage(MENU_SRC).catch(() => {});
 addMessage('bot', renderText(
 `嗨，我是客製化加價小幫手。
 ${EFFECTIVE_DATE} 起，補奶、加料、換特殊奶等客製化項目開始加價。
-直接問我就好，例如「去冰補奶要加錢嗎？」；也可以把想加的項目一起打出來，我幫你算好加價。
+直接打飲品和想調整的地方，例如「冰蜜柚紅茶少冰大杯」，我會告訴你這杯有沒有奶、要補什麼，並算好總價。
 有看不懂的地方，我會在收費圖表上用螢光筆標給你看。`), '依收費規則回覆');
 setChips(WELCOME_CHIPS);
