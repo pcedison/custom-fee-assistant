@@ -6,7 +6,11 @@ import { localReply, parseAiReply, money, matchTopics, normalize } from './engin
 import { renderHighlight, loadMenuImage } from './highlight.js';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
-const API_URL = '/api/chat';
+// AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
+// GitHub Pages 沒有後端，預設關閉 AI；部署到 Cloudflare Pages 時使用 /api/chat。
+const API_URL = (window.APP_CONFIG && 'apiUrl' in window.APP_CONFIG)
+  ? window.APP_CONFIG.apiUrl
+  : (location.hostname.endsWith('github.io') ? null : '/api/chat');
 const MARK_CHIP = '看不懂，標給我看';
 
 const $ = sel => document.querySelector(sel);
@@ -173,6 +177,7 @@ function botReply(r, userText) {
 
 // ---------- AI ----------
 async function askAI() {
+  if (!API_URL) return { error: 'no_backend' };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 40000);
   try {
@@ -184,7 +189,7 @@ async function askAI() {
     });
     let data = {};
     try { data = await res.json(); } catch { /* 非 JSON（例如本機預覽沒有後端） */ }
-    if (!res.ok || !data.reply) return { error: data.error || (res.status === 404 ? 'no_backend' : 'upstream') };
+    if (!res.ok || !data.reply) return { error: data.error || ([404, 405].includes(res.status) ? 'no_backend' : 'upstream') };
     return { reply: data.reply };
   } catch (e) {
     return { error: e.name === 'AbortError' ? 'timeout' : 'network' };
@@ -196,7 +201,7 @@ async function askAI() {
 const AI_ERRORS = {
   rate_limited: 'AI 目前使用人數較多（免費額度有限），請稍後再試。收費相關的問題，可以先點下面的常見問題。',
   timeout: 'AI 這次回覆太久了，請再問一次，或點下面的常見問題。',
-  no_backend: '這題不在收費規則裡，而 AI 目前沒有連線。可以換個說法，例如「燕麥奶加抹茶液多少」，或點下面的常見問題。',
+  no_backend: '這題我找不到對應的收費項目。我可以回答圖表上的加價問題，換個說法試試，例如「燕麥奶加抹茶液多少」，或點下面的常見問題。',
   missing_key: '這題不在收費規則裡，而 AI 目前沒有連線。可以換個說法，或點下面的常見問題。',
 };
 
