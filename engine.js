@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610121515';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610121515';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610121546';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610121546';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -265,20 +265,112 @@ const DRINK_KEYS = (() => {
   return list.sort((a, b) => b.k.length - a.k.length);
 })();
 
-export function findDrinks(fixed) {
-  let work = fixed;
-  const hits = [];
-  for (const { k, base } of DRINK_KEYS) {
-    let idx = work.indexOf(k);
+// ---------------------------------------------------------------
+// 飲品名稱模糊比對
+//  1. 「加／換／升級／補」後面的加料詞先拿掉（例如「冰那堤加可可碎片」的可可碎片）
+//  2. 其餘文字和每個飲品名稱比「共同片段」：相同的連續字越多越像，可容忍錯字、漏字
+//  3. 只落在加料詞裡的片段不算（例如單獨說「可可碎片」不會被當成飲品）
+//  4. 自動選最像的；幾杯一樣像就列出來讓人點選
+// ---------------------------------------------------------------
+const SOFT_NAMES = uniq([...ITEM_NAMES.map(x => x.n), ...ADDON_BLOCK.map(normalize)])
+  .filter(n => n.length >= 2).sort((a, b) => b.length - a.length);
+const RE_HARD_VERB = /(?:多加|再加|另加|加|多|換成|換|升級|補)(?:(?:\d{1,2}|[一二兩三四五六七八九十]{1,3})(?:份|個|次|種|匙|下|shot))?$/;
+const HARD_PREFIX = /^(升級|補|加|換|多加|再加)/;
+const RE_SEP = /[\p{P}\s]/u;
+
+function addonSpans(fixed) {
+  let work = stripDrinks(fixed);
+  const spans = [];
+  for (const n of SOFT_NAMES) {
+    let idx = work.indexOf(n);
     while (idx !== -1) {
-      if (base) hits.push({ base, idx, len: k.length });
-      work = work.slice(0, idx) + blank(k) + work.slice(idx + k.length);
-      idx = work.indexOf(k, idx + k.length);
+      const before = fixed.slice(Math.max(0, idx - 6), idx);
+      spans.push({ s: idx, e: idx + n.length, hard: RE_HARD_VERB.test(before) || HARD_PREFIX.test(n) });
+      work = work.slice(0, idx) + blank(n) + work.slice(idx + n.length);
+      idx = work.indexOf(n, idx + n.length);
     }
   }
-  hits.sort((a, b) => a.idx - b.idx);
-  const seen = new Set();
-  return hits.filter(h => (seen.has(h.base) ? false : seen.add(h.base)));
+  return spans;
+}
+
+function commonChunks(q, k) {
+  const qa = [...q], ka = [...k];
+  const chunks = [];
+  for (;;) {
+    let best = null;
+    for (let i = 0; i < qa.length; i++) {
+      if (qa[i] === BLANK) continue;
+      for (let j = 0; j < ka.length; j++) {
+        let L = 0;
+        while (i + L < qa.length && j + L < ka.length && qa[i + L] !== BLANK && ka[j + L] !== '■' && qa[i + L] === ka[j + L]) L++;
+        if (L >= 2 && (!best || L > best.len)) best = { qs: i, ks: j, len: L };
+      }
+    }
+    if (!best) break;
+    chunks.push(best);
+    for (let x = 0; x < best.len; x++) { qa[best.qs + x] = BLANK; ka[best.ks + x] = '■'; }
+  }
+  return chunks.sort((a, b) => a.qs - b.qs);
+}
+
+function scoreKey(q, fixed, k, soft) {
+  const ch = commonChunks(q, k);
+  if (!ch.length) return null;
+  const regions = [];
+  for (const c of ch) {
+    const last = regions[regions.length - 1];
+    const gap = last ? fixed.slice(last.e, c.qs) : '';
+    if (last && c.qs - last.e <= 1 && !RE_SEP.test(gap)) { last.e = c.qs + c.len; last.chunks.push(c); }
+    else regions.push({ s: c.qs, e: c.qs + c.len, chunks: [c] });
+  }
+  const kept = regions.filter(r => !soft.some(sp => r.s >= sp.s && r.e <= sp.e));
+  const chunks = kept.flatMap(r => r.chunks);
+  const matched = chunks.reduce((n, c) => n + c.len, 0);
+  if (matched < 2) return null;
+  const exact = chunks.length === 1 && matched === k.length;
+  if (!exact && matched < 3) return null;
+  return { matched, cov: matched / k.length, exact, chunks, s: kept[0].s, e: kept[kept.length - 1].e, keyLen: k.length };
+}
+
+function rankCandidates(q, fixed, soft) {
+  const best = new Map();
+  for (const { k, base } of DRINK_KEYS) {
+    if (!base) continue;
+    const r = scoreKey(q, fixed, k, soft);
+    if (!r) continue;
+    const prev = best.get(base);
+    if (!prev || r.matched > prev.matched || (r.matched === prev.matched && r.cov > prev.cov)) best.set(base, { ...r, base });
+  }
+  return [...best.values()].sort((a, b) =>
+    b.matched - a.matched || b.cov - a.cov || (b.exact - a.exact) || a.keyLen - b.keyLen || a.s - b.s);
+}
+
+export function findDrinks(fixed) {
+  const spans = addonSpans(fixed);
+  const soft = spans.filter(sp => !sp.hard);
+  let q = [...fixed].map((c, i) => (spans.some(sp => sp.hard && i >= sp.s && i < sp.e) ? BLANK : c)).join('');
+  const found = [];
+  for (let round = 0; round < 4; round++) {
+    const cands = rankCandidates(q, fixed, soft);
+    if (!cands.length) break;
+    const top = cands[0];
+    if (round > 0 && !(top.exact || top.cov >= 0.6)) break;
+    const overlap = cands.slice(1).filter(c => c.s < top.e && c.e > top.s);
+    const ties = top.exact ? [] : overlap.filter(c => c.matched === top.matched);
+    found.push({ ...top, idx: top.s, ties, alts: overlap });
+    const qa = [...q];
+    for (const c of top.chunks) for (let x = 0; x < c.len; x++) qa[c.qs + x] = BLANK;
+    q = qa.join('');
+  }
+  return found.sort((a, b) => a.s - b.s);
+}
+
+// 用某一杯取代模糊比對到的那段字，例如「巧克力可可碎片加…」→「經典巧克力，可可碎片加…」
+function rewriteWith(fixed, c) {
+  const used = new Set(c.chunks.flatMap(ch => Array.from({ length: ch.len }, (_, x) => ch.qs + x)));
+  const mid = [...fixed.slice(c.s, c.e)].filter((_, i) => !used.has(c.s + i)).join('');
+  const rest = (mid + fixed.slice(c.e)).replace(/^[,，、\s]+/, '');
+  return fixed.slice(0, c.s) + c.base + (rest ? '，' + rest : '');
 }
 
 function pickVariant(base, fixed, idx) {
@@ -346,11 +438,34 @@ export function buildOrder(norm) {
     return { kind: 'multi', drinks: picks.slice(0, 4).map(drinkSummary) };
   }
 
+  const h0 = hits[0];
+  const said = fixed.slice(h0.s, h0.e);
+  // 幾杯一樣像 → 列出來讓人選
+  if (h0.ties.length) {
+    return {
+      kind: 'choose',
+      said,
+      options: [h0, ...h0.ties].slice(0, 4).map(c => ({
+        ...drinkSummary(pickVariant(c.base, fixed, c.s)),
+        text: rewriteWith(fixed, c),
+      })),
+    };
+  }
+
   const pk = picks[0];
   const d = pk.drink;
   const dn = pk.tempKnown ? d.n : baseName(d.n);
-  let itemsText = fixed;
-  for (const h of hits) itemsText = itemsText.slice(0, h.idx) + blank(itemsText.slice(h.idx, h.idx + h.len)) + itemsText.slice(h.idx + h.len);
+  const itemsArr = [...fixed];
+  for (const h of hits) for (const c of h.chunks) for (let x = 0; x < c.len; x++) itemsArr[c.qs + x] = BLANK;
+  let itemsText = itemsArr.join('');
+  const match = {
+    said,
+    fuzzy: !h0.exact,
+    alts: h0.exact ? [] : h0.alts.slice(0, 2).map(c => ({
+      name: drinkSummary(pickVariant(c.base, fixed, c.s)).name.replace(/（.*$/, ''),
+      text: rewriteWith(fixed, c),
+    })),
+  };
 
   const ex0 = {};
   const items = extractItems(itemsText, ex0);
@@ -548,7 +663,7 @@ export function buildOrder(norm) {
     drink: d,
     tempKnown: pk.tempKnown,
     sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
-    basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord,
+    basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord, match,
     // 冰飲、可補、還沒指定冰量 → 卡片上給「正常冰／少冰／去冰」按鈕
     iceSelectable: d.t === 'iced' && !iceLess && !refill && !d.noice && (rt === 'milk' || rt === 'tea'),
     regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
@@ -571,11 +686,15 @@ function explainOrder(o) {
 }
 
 export function orderToText(o) {
+  if (o.kind === 'choose') {
+    return [`「${o.said}」有幾杯很像，你是指哪一杯？`, ...o.options.map(s => `- ${s.name}：${s.milk}｜${s.prices}`)].join('\n');
+  }
   if (o.kind === 'multi') {
     return o.drinks.map(s => `${s.name}：${s.milk}｜${s.comp}｜${s.prices}`).join('\n');
   }
   const s = o.summary;
   const out = [`${s.name}：${s.milk}｜${s.comp}`, `價格：${s.prices}`];
+  if (o.match?.fuzzy) out.push(`（依「${o.match.said}」判斷是這杯${o.match.alts.length ? `；也可能是：${o.match.alts.map(a => a.name).join('、')}` : ''}）`);
   o.lines.forEach(l => out.push(`- ${l.label} ${l.status || (l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount))}`));
   if (o.lines.length) out.push(`加價合計 ${money(o.addTotal)}`);
   if (o.basePrice != null) out.push(`**合計（${o.sizeLabel}）：$${o.basePrice + o.addTotal}**`);
@@ -735,6 +854,15 @@ export function localReply(input, state = {}) {
     }
   }
   if (order) {
+    if (order.kind === 'choose') {
+      return {
+        source: 'local',
+        text: orderToText(order),
+        order,
+        topics: [],
+        chips: ['哪些飲料有牛奶？', '有哪些新收費？'],
+      };
+    }
     if (order.kind === 'multi') {
       return {
         source: 'local',

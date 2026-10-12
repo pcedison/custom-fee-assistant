@@ -192,6 +192,19 @@ mark.price {
   font-size: 14.5px; line-height: 1.6;
 }
 
+.guess { margin-top: 8px !important; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+.guess p { margin: 0; }
+.guess-alts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.alt-btn, .choose-btn {
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 999px; padding: 6px 12px; font-size: 14px; text-align: left;
+}
+.choose-q { font-size: 16.5px; font-weight: 700; }
+.choose-list { list-style: none; padding: 0 !important; margin: 8px 0 0; display: grid; gap: 8px; }
+.choose-list li { margin: 0; }
+.choose-btn { width: 100%; border-radius: 12px; padding: 10px 12px; display: grid; gap: 4px; }
+.choose-btn .drink-name { font-size: 16px; font-weight: 700; }
+.choose-btn .drink-prices { font-size: 13.5px; color: var(--ink-2); margin: 0 !important; }
 .ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
 .ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
 .ice-btn {
