@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610121546';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610121546';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610121546';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610121921';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610121921';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610121921';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -82,7 +82,7 @@ function renderOrder(o, opts = {}) {
   if (o.kind === 'choose') {
     return `
       <p class="choose-q">你是指哪一杯？</p>
-      <p class="note">「${esc(o.said)}」有幾杯很像，點一下就幫你算。</p>
+      <p class="note">名稱有「${esc(o.said)}」的飲品有 ${o.options.length} 杯，點一下就幫你算。</p>
       <ul class="choose-list">${o.options.map(s => `
         <li><button type="button" class="choose-btn" data-send="${esc(s.text)}">
           <span class="drink-row"><span class="drink-name">${esc(s.name)}</span>${milkTag(s)}</span>
@@ -108,8 +108,10 @@ function renderOrder(o, opts = {}) {
       ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
       ${o.match?.fuzzy ? `
         <div class="guess">
-          <p>依「${esc(o.match.said)}」判斷是這杯。${o.match.alts.length ? '不是的話，點：' : ''}</p>
-          ${o.match.alts.length ? `<div class="guess-alts">${o.match.alts.map(a => `<button type="button" class="alt-btn" data-send="${esc(a.text)}">${esc(a.name)}</button>`).join('')}</div>` : ''}
+          <p>依「${esc(o.match.said)}」判斷是這杯。</p>
+          ${o.match.alts.length ? `
+            <p class="guess-q">不是這杯？點下面換一杯：</p>
+            <div class="guess-alts">${o.match.alts.map(a => `<button type="button" class="alt-btn" data-send="${esc(a.text)}">${esc(a.name)}</button>`).join('')}</div>` : ''}
         </div>` : ''}
     </div>`;
   if (opts.iceSel) {
@@ -449,6 +451,6 @@ loadMenuImage(MENU_SRC).catch(() => {});
 addMessage('bot', renderText(
 `嗨，我是客製化加價小幫手。
 ${EFFECTIVE_DATE} 起，補奶、加料、換特殊奶等客製化項目開始加價。
-直接打飲品和想調整的地方，例如「冰蜜柚紅茶少冰大杯」，我會告訴你這杯有沒有奶、要補什麼，並算好總價。
+直接打飲品和想調整的地方，例如「冰蜜柚紅茶少冰大杯」，我會告訴你這杯有沒有奶、要補什麼，並算好總價。記不得全名也沒關係，打「可可」「桂花」這類關鍵字，我會列出符合的飲品。
 有看不懂的地方，我會在收費圖表上用螢光筆標給你看。`), '依收費規則回覆');
 setChips(WELCOME_CHIPS);
