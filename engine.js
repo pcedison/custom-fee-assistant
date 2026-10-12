@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122048';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink } from './drinks.js?v=202610122048';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122107';
+import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122107';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -1011,10 +1011,44 @@ export function drinkRefs(names, aiText) {
       work = work.split(k).join(BLANK.repeat(k.length));
     }
   }
-  return out.slice(0, 4).map(d => {
-    const s = drinkSummary({ drink: d, alt: null, tempKnown: true });
-    return { name: s.name, milk: s.milk, hasMilk: s.hasMilk, prices: s.prices, text: d.n };
-  });
+  return out.slice(0, 4).map(refCard);
+}
+function refCard(d) {
+  const s = drinkSummary({ drink: d, alt: null, tempKnown: true });
+  return { name: s.name, milk: s.milk, hasMilk: s.hasMilk, comp: s.comp, prices: s.prices, text: d.n, dairyFree: isDairyFree(d) };
+}
+
+// 已知 AI 容易講錯的飲品知識：整句拿掉，再補上正確說法
+const FACT_FIXES = [
+  {
+    wrong: x => /冷萃|氮氣/.test(x) && /濃縮/.test(x)
+      && !/不是|不用|不經|並非|而是|不同|沒有|不含|加(一|兩|二|1|2)?份?濃縮|加濃縮|升級|特選|\+\s?\$|＋\s?\$|\$\s?15/.test(x),
+    fact: '冷萃咖啡是用冷水長時間浸泡咖啡粉萃取的，不是用濃縮咖啡做的；美式咖啡才是濃縮咖啡加水。',
+  },
+  {
+    wrong: x => /冰美式/.test(x) && /熱水/.test(x),
+    fact: '冰美式咖啡是濃縮咖啡加冷水和冰塊。',
+  },
+];
+export function fixFacts(text) {
+  const facts = [];
+  const out = [];
+  for (const line of String(text || '').split('\n')) {
+    const kept = line
+      .split(/(?<=[。！？!?；;])/)
+      .filter(sent => {
+        const f = FACT_FIXES.find(ff => ff.wrong(normalize(sent)));
+        if (f && !facts.includes(f.fact)) facts.push(f.fact);
+        return !f;
+      })
+      .join('');
+    // 整行都被拿掉就不留空行（只剩「- 」也算）
+    if (line.trim() && !kept.replace(/^\s*([-•*]|\d+[.、])\s*/, '').trim()) continue;
+    out.push(kept);
+  }
+  let res = out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  if (facts.length) res += (res ? '\n' : '') + facts.join('\n');
+  return res;
 }
 
 // 拿掉 AI 自己寫的飲品價格（加價金額 +$15、−$10 保留）
@@ -1046,7 +1080,106 @@ export function parseAiReply(raw) {
   const topicIds = ids.filter(id => TOPIC_BY_ID[id]);
   const regions = uniq(ids.flatMap(id => TOPIC_BY_ID[id]?.regions || (REGIONS[id] ? [id] : [])));
   const mentioned = matchTopics(normalize(text)).filter(t => !t.low).map(t => t.id);
+  text = fixFacts(text);
   const drinks = drinkRefs(drinkNames, text);
   if (drinks.length) text = stripDrinkPrices(text).trim();
   return { text, regions, topics: uniq([...topicIds, ...mentioned]).slice(0, 3), drinks };
+}
+
+// ---------------------------------------------------------------
+// 不含奶／牛奶過敏：檢查 AI 的推薦，含奶的一律不能出現
+// ---------------------------------------------------------------
+export { dietFor };
+const RE_NEGATED = /(不|無|沒|免|零|非)(能|可|用)?(有|含|加|放|要|喝)?(加)?(牛|鮮)?(奶|乳)(製品)?(?![油泡])/g;
+const RE_WARN = /(含|有)(牛|鮮|椰|燕麥|豆)?(奶|乳)|乳製品|避開|避免|不建議|不適合|不要選|不能喝|別選|要小心|不推薦|請注意/;
+const RE_MILK_WORD = /那堤|摩卡|瑪奇朵|歐蕾|卡布奇諾|巧克力|奶茶|馥列白|密斯朵|馥洛特|阿法奇朵|星冰樂|鮮奶|牛奶|奶泡|奶油|冰淇淋|燕麥奶|椰奶|豆奶|雲朵冰搖/;
+const RE_VARIANT_PAREN = /\((無|不加|去|不含|沒有|去掉|免)(牛|鮮)?奶\)/;
+const RE_VARIANT = /(要求|請夥伴|跟夥伴|告訴夥伴|可以|改成|改為|換成|選擇|點)[^,，。；;\n]{0,8}(不加|不要|去掉|拿掉|去|無|免)(牛|鮮)?奶(?![油泡])/g;
+const SAFE_KEYS = DRINKS.filter(isDairyFree).flatMap(d => [normalize(d.n), normalize(baseName(d.n))])
+  .filter(k => k.length >= 3).sort((a, b) => b.length - a.length);
+const MILK_KEYS = DRINKS.filter(d => !isDairyFree(d)).flatMap(d => [normalize(d.n), normalize(baseName(d.n))])
+  .filter(k => k.length >= 3).sort((a, b) => b.length - a.length);
+
+// 「對牛奶過敏」「乳糖不耐」是在說需求，不算提到含奶飲品
+const RE_NEED = /(對)?(牛|鮮)?奶(類|製品)?(過敏|不耐)|乳糖不耐|乳製品過敏/g;
+function dietLineBad(raw) {
+  const line = normalize(fixNames(raw)).replace(RE_NEED, BLANK);
+  if (!line) return false;
+  if (RE_VARIANT_PAREN.test(line)) return true;
+  for (const m of line.matchAll(RE_VARIANT)) {
+    const before = line.slice(Math.max(0, m.index - 12), m.index);
+    if (!/不要|別|不建議|避免|不可|不能|勿/.test(before)) return true;
+  }
+  let rest = line;
+  for (const k of SAFE_KEYS) rest = rest.split(k).join(BLANK);
+  rest = rest.replace(RE_NEGATED, BLANK);
+  if (RE_WARN.test(rest)) return false;
+  return RE_MILK_WORD.test(rest) || MILK_KEYS.some(k => rest.includes(k));
+}
+export function dietProblems(text) {
+  return String(text || '').split('\n').filter(dietLineBad);
+}
+
+// 拿掉有問題的行；編號項目（1. 2. 3.）被拿掉時，底下的說明行一起拿掉
+const RE_NUM_ITEM = /^\s*(\*\*)?\d+[.、)）]/;
+function repairDietText(text) {
+  const out = [];
+  let skipping = false;
+  for (const line of String(text || '').split('\n')) {
+    if (RE_NUM_ITEM.test(line) || !line.trim()) skipping = false;
+    if (skipping) continue;
+    if (dietLineBad(line)) { skipping = RE_NUM_ITEM.test(line); continue; }
+    out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const DIET_GROUPS = [
+  ['咖啡', d => (d.g === 'esp' || d.g === 'brew')],
+  ['冷萃（不能補）', d => d.g === 'cb'],
+  ['茶', d => d.g === 'tea'],
+  ['星沁爽、果汁', d => d.g === 'ref' || d.g === 'juice'],
+];
+const DIET_PICKS = ['冰美式咖啡', '冷萃咖啡', '冰搖檸檬紅茶', '芒果火龍果檸檬星沁爽'];
+
+// AI 不可用或推薦了含奶飲品時，改用官網成分整理的固定答案
+export function dietFallback(diet) {
+  const ok = DRINKS.filter(dietSafe);
+  const lines = DIET_GROUPS.map(([label, f]) => {
+    const names = uniq(ok.filter(f).map(d => baseName(d.n)));
+    return names.length ? `- ${label}：${names.join('、')}` : '';
+  }).filter(Boolean);
+  const reminder = diet === 'allergy'
+    ? '⚠️ 奶油、冰淇淋也是乳製品；含奶的飲品請不要用「不加奶」的方式點，醬料、奶泡也可能有乳製品，請直接選不含奶的品項，點餐時也告訴夥伴你對牛奶過敏。'
+      + (DRINKS.some(dairyUnsure) ? '「雲朵泡泡美式」官網沒有列出奶類，過敏的話請先向夥伴確認。' : '')
+    : '名字有「那堤、歐蕾、瑪奇朵、摩卡、巧克力、卡布奇諾」和大部分星冰樂都含奶，想喝不含奶的請直接選不含奶的品項。';
+  const text = [
+    diet === 'allergy' ? '對牛奶過敏、乳糖不耐的話，可以從這些**不含奶**的飲品挑（依官網成分）：' : '這些飲品**不含奶**（依官網成分）：',
+    ...lines,
+    diet === 'allergy' ? '名字有「那堤、歐蕾、瑪奇朵、摩卡、巧克力、卡布奇諾」和大部分星冰樂都含奶；椰奶款星沁爽有椰奶。' : '椰奶款星沁爽有椰奶。',
+    reminder,
+  ].join('\n');
+  return { text, reminder, refs: DIET_PICKS.map(n => DRINKS.find(d => d.n === n)).filter(Boolean).map(refCard) };
+}
+
+// 檢查 AI 對「不含奶／過敏」推薦題的回答：
+//   沒問題 → 照用；少數幾行有問題 → 拿掉那幾行並補提醒；救不回來 → 換成固定答案
+export function guardDietReply(diet, p, { inherited = false } = {}) {
+  const fb = dietFallback(diet);
+  const safeRefs = (p.drinks || []).filter(r => r.dairyFree && dietSafe(DRINKS.find(d => d.n === r.text) || {}));
+  // 沿用上一句需求的短追問可能根本不是在問飲品，就不硬塞預設飲品
+  const refs = safeRefs.length || inherited ? safeRefs : fb.refs;
+  const problems = dietProblems(p.text);
+  if (!problems.length && p.text.trim()) return { text: p.text, refs, status: 'ok', problems };
+  const fixed = repairDietText(p.text);
+  const norm = normalize(fixNames(fixed));
+  // 拿掉後至少還有兩杯不含奶的推薦才保留 AI 的回答
+  const kept = uniq(DRINKS.filter(dietSafe)
+    .filter(d => norm.includes(normalize(d.n)) || norm.includes(normalize(baseName(d.n))))
+    .map(d => baseName(d.n)));
+  if (kept.length >= 2) {
+    return { text: `${fixed}\n${fb.reminder}`, refs, status: 'repaired', problems };
+  }
+  const more = fb.refs.filter(r => !safeRefs.some(x => x.text === r.text));
+  return { text: fb.text, refs: [...safeRefs, ...more].slice(0, 4), status: 'replaced', problems };
 }

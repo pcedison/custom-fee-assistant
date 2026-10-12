@@ -221,6 +221,7 @@ mark.price {
 .choose-btn .drink-name { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
 .choose-btn .milk-tag { font-size: 12px; padding: 4px 8px; }
 .choose-btn .drink-prices { font-size: 13px; color: var(--ink-2); margin: 0 !important; }
+.choose-btn .ref-comp { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
 .ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
 .ice-btn {

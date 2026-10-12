@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122048';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122048';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122048';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122107';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback } from './engine.js?v=202610122107';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122107';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -160,13 +160,14 @@ function renderOrder(o, opts = {}) {
   return html;
 }
 
-function renderRefs(list) {
+function renderRefs(list, title = '提到的飲品') {
   return `
     <div class="refs">
-      <p class="refs-title">提到的飲品（價格依官網，點一下可試算）</p>
+      <p class="refs-title">${esc(title)}（成分、價格依官網，點一下可試算）</p>
       <ul class="choose-list">${list.map(s => `
         <li><button type="button" class="choose-btn" data-send="${esc(s.text)}">
           <span class="drink-row"><span class="drink-name">${esc(s.name)}</span>${milkTag(s)}</span>
+          ${s.comp && s.comp !== s.name.replace(/^[冰熱](?!搖)/, '') && s.comp !== s.name ? `<span class="ref-comp">${esc(s.comp)}</span>` : ''}
           <span class="drink-prices">${esc(s.prices)}</span>
         </button></li>`).join('')}</ul>
     </div>`;
@@ -264,10 +265,13 @@ async function attachImage(row, { regions, plain, caption }) {
   }
 }
 
+const HEALTH_NOTE = '<p class="note">⚠️ 過敏或健康相關需求，請以門市與包裝標示為準；飲品製作過程可能接觸乳製品等過敏原。</p>';
+
 function botReply(r, userText) {
   let body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
-  if (r.refs?.length) body += renderRefs(r.refs);
-  if (r.health) body += '<p class="note">⚠️ 過敏或健康相關需求，請以門市與包裝標示為準；飲品製作過程可能接觸乳製品等過敏原。</p>';
+  if (r.refs?.length) body += renderRefs(r.refs, r.refsTitle);
+  if (r.health) body += HEALTH_NOTE;
+  if (r.order && r.health) r.order.health = true;
   const meta = r.meta || (r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆');
   const row = addMessage('bot', body, meta);
 
@@ -306,7 +310,7 @@ function setupCard(row, firstOrder, baseText) {
   const draw = () => {
     const { o, ask } = current();
     if (!o || o.kind !== 'drink') return;
-    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null });
+    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null }) + (firstOrder.health ? HEALTH_NOTE : '');
     bubble.querySelectorAll('.ice-btn').forEach(b => b.addEventListener('click', () => {
       if (ice === b.dataset.ice) return;
       ice = b.dataset.ice;
@@ -373,6 +377,11 @@ function aiFirst(text, local) {
 
 const RE_HEALTH = /(過敏|乳糖|孕婦|懷孕|咖啡因|熱量|卡路里|健康|減肥|吃素|素食|糖尿病)/;
 
+function dietReply(kind) {
+  const fb = dietFallback(kind);
+  return { source: 'local', meta: '依官網成分整理', text: fb.text, refs: fb.refs, refsTitle: '不含奶的飲品', health: kind === 'allergy', topics: [], chips: WELCOME_CHIPS.slice(0, 3) };
+}
+
 // 規則有看不懂的詞時，先問 AI 能不能聽懂
 const hasUnknown = o => !!o?.notes?.some(n => /沒看懂/.test(n));
 function needsAI(local) {
@@ -404,7 +413,18 @@ async function send(text) {
 
   try {
     const local = localReply(text, state);
-    const preferAI = aiFirst(text, local);
+    const diet = dietFor(state.history);
+    // 不含奶／過敏的推薦題（不是在點某一杯）：交給 AI 並檢查；沒有 AI 時用官網成分整理的固定答案
+    // 沿用上一句需求的短追問（例如「那熱的呢」）：本身是別的問題（規則認得）就照規則回答
+    const dietAsk = diet.recommend && !local?.order && !(diet.inherited && local);
+    const preferAI = aiFirst(text, local) || (dietAsk && !!API_URL);
+    if (dietAsk && !API_URL) {
+      await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
+      hideTyping();
+      botReply(dietReply(diet.diet), text);
+      return;
+    }
+    if (local && diet.diet === 'allergy' && !diet.inherited) local.health = true;
     if (local && !needsAI(local) && !preferAI) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
@@ -419,6 +439,7 @@ async function send(text) {
       if (ord?.r && (!local || !hasUnknown(ord.r.order))) {
         ord.r.order.aiSaid = ord.text;
         ord.r.meta = 'AI 判讀，金額依收費規則計算';
+        ord.r.health = diet.diet === 'allergy' || RE_HEALTH.test(normalize(text));
         botReply(ord.r, text);
         return;
       }
@@ -434,18 +455,25 @@ async function send(text) {
       }
       const p = parseAiReply(ai.reply.replace(/^.*ORDER\s*[:：].*$/gim, ''));
       const onTopic = matchTopics(normalize(text)).some(t => !t.low);
+      const health = diet.diet === 'allergy' || RE_HEALTH.test(normalize(text));
+      if (health || diet.diet) p.text = p.text.replace(/[，,]?\s*(您|你)?(都)?(可以|能)?(很)?(安心|放心)(地)?(飲用|喝|享用|選擇)?/g, '');
+      // 不含奶／過敏的推薦：含奶的飲品一律不能出現，AI 答錯就換成依官網成分整理的答案
+      const g = dietAsk ? guardDietReply(diet.diet, p, { inherited: diet.inherited }) : null;
+      if (g && g.status !== 'ok') console.warn(`[diet] AI 回答提到含奶飲品（${g.status}）：`, g.problems);
       botReply({
         source: 'ai',
-        refs: p.drinks,
-        health: RE_HEALTH.test(normalize(text)),
-        text: (RE_HEALTH.test(normalize(text)) ? p.text.replace(/[，,]?\s*(您|你)?(都)?(可以|能)?(很)?放心(地)?(飲用|喝|享用)/g, '') : p.text)
-          || '我沒有整理出答案，請換個方式再問一次。',
+        meta: g?.status === 'replaced' ? '依官網成分整理' : (g?.status === 'repaired' ? 'AI 回覆，已依官網成分拿掉含奶飲品' : ''),
+        refs: g ? g.refs : p.drinks,
+        refsTitle: g ? '不含奶的飲品' : undefined,
+        health,
+        text: (g ? g.text : p.text) || '我沒有整理出答案，請換個方式再問一次。',
         regions: p.regions,
         caption: '圖上相關的地方用橘色螢光筆標起來了，點圖可以放大。',
         topics: onTopic ? p.topics : [],
         chips: onTopic && p.topics.length ? [MARK_CHIP, ...WELCOME_CHIPS.slice(0, 2)] : WELCOME_CHIPS.slice(0, 3),
       }, text);
     } else {
+      if (dietAsk) { botReply(dietReply(diet.diet), text); return; }
       if (local) { botReply(local, text); return; }
       const msg = AI_ERRORS[ai.error] || 'AI 暫時無法回覆，請稍後再試，或點下面的常見問題。';
       addMessage('bot', renderText(msg), '系統訊息');
