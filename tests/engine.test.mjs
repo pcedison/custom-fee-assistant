@@ -213,6 +213,21 @@ t('收費問題不會被當成搜尋', () => {
   assert.equal(order('咖啡要加錢嗎'), null);
 });
 
+console.log('AI 回覆的價格校正');
+t('AI 寫錯價格（冰美式 $105）→ 拿掉，改附官網價格卡片', () => {
+  const raw = '- 這邊有幾杯不含奶的選擇：\n1. **冰美式咖啡 中杯**\n- 簡單清爽\n- **價格：中杯 $105**\n2. **冰搖紅茶 中杯**\n- 價格：中杯 $105\n補牛奶 +$15 也可以';
+  const p = parseAiReply(raw);
+  assert.ok(!/\$105/.test(p.text), p.text);
+  assert.match(p.text, /\+\$15/);
+  assert.deepEqual(p.drinks.map(d => d.name), ['冰美式咖啡', '冰搖紅茶']);
+  assert.match(p.drinks[0].prices, /中杯 \$100/);
+});
+t('AI 用 [[DRINKS:…]] 指定飲品', () => {
+  const p = parseAiReply('冷萃比較順口。\n[[DRINKS:冷萃咖啡,冰美式咖啡]]');
+  assert.equal(p.text, '冷萃比較順口。');
+  assert.deepEqual(p.drinks.map(d => d.name), ['冷萃咖啡', '冰美式咖啡']);
+});
+
 console.log('看不懂 → 標示圖片');
 t('補飲料是什麼意思 → 帶圖', () => {
   const r = reply('補飲料是什麼意思？');

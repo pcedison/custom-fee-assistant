@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122042';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122042';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122042';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122048';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122048';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122048';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -160,6 +160,18 @@ function renderOrder(o, opts = {}) {
   return html;
 }
 
+function renderRefs(list) {
+  return `
+    <div class="refs">
+      <p class="refs-title">提到的飲品（價格依官網，點一下可試算）</p>
+      <ul class="choose-list">${list.map(s => `
+        <li><button type="button" class="choose-btn" data-send="${esc(s.text)}">
+          <span class="drink-row"><span class="drink-name">${esc(s.name)}</span>${milkTag(s)}</span>
+          <span class="drink-prices">${esc(s.prices)}</span>
+        </button></li>`).join('')}</ul>
+    </div>`;
+}
+
 function renderQuote(q) {
   const rows = q.lines.map(l => `
     <li><span>${esc(l.label)}</span><span class="amt">${l.amount === 0 ? '不加價' : `<mark class="price">${money(l.amount)}</mark>`}</span></li>`).join('');
@@ -253,7 +265,9 @@ async function attachImage(row, { regions, plain, caption }) {
 }
 
 function botReply(r, userText) {
-  const body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
+  let body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
+  if (r.refs?.length) body += renderRefs(r.refs);
+  if (r.health) body += '<p class="note">⚠️ 過敏或健康相關需求，請以門市與包裝標示為準；飲品製作過程可能接觸乳製品等過敏原。</p>';
   const meta = r.meta || (r.source === 'ai' ? 'AI 回覆，僅供參考' : '依收費規則回覆');
   const row = addMessage('bot', body, meta);
 
@@ -357,6 +371,8 @@ function aiFirst(text, local) {
   return !(local?.order?.kind === 'drink' && !local.order.match?.fuzzy && local.order.lines.length);
 }
 
+const RE_HEALTH = /(過敏|乳糖|孕婦|懷孕|咖啡因|熱量|卡路里|健康|減肥|吃素|素食|糖尿病)/;
+
 // 規則有看不懂的詞時，先問 AI 能不能聽懂
 const hasUnknown = o => !!o?.notes?.some(n => /沒看懂/.test(n));
 function needsAI(local) {
@@ -420,7 +436,10 @@ async function send(text) {
       const onTopic = matchTopics(normalize(text)).some(t => !t.low);
       botReply({
         source: 'ai',
-        text: p.text || '我沒有整理出答案，請換個方式再問一次。',
+        refs: p.drinks,
+        health: RE_HEALTH.test(normalize(text)),
+        text: (RE_HEALTH.test(normalize(text)) ? p.text.replace(/[，,]?\s*(您|你)?(都)?(可以|能)?(很)?放心(地)?(飲用|喝|享用)/g, '') : p.text)
+          || '我沒有整理出答案，請換個方式再問一次。',
         regions: p.regions,
         caption: '圖上相關的地方用橘色螢光筆標起來了，點圖可以放大。',
         topics: onTopic ? p.topics : [],
