@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122014';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122014';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122014';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122042';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText } from './engine.js?v=202610122042';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122042';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -349,6 +349,14 @@ const AI_ERRORS = {
   missing_key: '這題不在收費規則裡，而 AI 目前沒有連線。可以換個說法，或點下面的常見問題。',
 };
 
+// 需要理解意圖的問題（推薦、比較、適不適合…）優先交給 AI；關鍵字規則只會照字面回答
+const RE_AI_FIRST = /(推薦|建議|適合|好喝|比較好|哪個好|哪一杯|哪杯|喝什麼|有什麼可以|可以喝|能喝|不能喝|過敏|乳糖|吃素|素食|熱量|卡路里|咖啡因|孕婦|小孩|減肥|最便宜|便宜一點|划算|省錢|差在哪|差別|有什麼不同|怎麼選|幫我選|想喝)/;
+function aiFirst(text, local) {
+  if (!API_URL || !RE_AI_FIRST.test(normalize(text))) return false;
+  // 已經是明確的一杯飲料試算，就不用 AI
+  return !(local?.order?.kind === 'drink' && !local.order.match?.fuzzy && local.order.lines.length);
+}
+
 // 規則有看不懂的詞時，先問 AI 能不能聽懂
 const hasUnknown = o => !!o?.notes?.some(n => /沒看懂/.test(n));
 function needsAI(local) {
@@ -380,7 +388,8 @@ async function send(text) {
 
   try {
     const local = localReply(text, state);
-    if (local && !needsAI(local)) {
+    const preferAI = aiFirst(text, local);
+    if (local && !needsAI(local) && !preferAI) {
       await new Promise(r => setTimeout(r, reduceMotion ? 0 : 380));
       hideTyping();
       botReply(local, text);
@@ -397,7 +406,7 @@ async function send(text) {
         botReply(ord.r, text);
         return;
       }
-      if (local) {
+      if (local && !preferAI) {
         const note = !ord ? cleanAiText(ai.reply) : '';
         if (note && local.order?.kind === 'drink') local.order.aiNote = note;
         botReply(local, text);
