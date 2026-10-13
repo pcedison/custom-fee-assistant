@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610131524';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote } from './engine.js?v=202610131524';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610131524';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610131544';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote } from './engine.js?v=202610131544';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610131544';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -195,11 +195,11 @@ function renderBaf(q, baf, o2) {
     const r = q.rows[0];
     body = `${r.cups.map(cupHtml).join('')}
       <p class="receipt-total"><span>兩杯合計（${esc(r.label)}）</span><mark class="price">$${r.total}</mark></p>
-      <p class="receipt-foot">不用券兩杯共 $${r.original}，省 $${r.saved}。實際以門市結帳為準。</p>`;
+      <p class="receipt-foot">省 $${r.saved}。實際以門市結帳為準。</p>`;
   } else {
     body = `<p class="baf-pick">兩杯要同杯型，點一個杯型看明細：</p>
       <div class="baf-sizes">${q.rows.map(r => `
-        <button type="button" class="baf-size" data-size="${esc(r.label)}"><span>${esc(r.label)}</span><b>$${r.total}</b><small>省 $${r.saved}</small></button>`).join('')}</div>`;
+        <button type="button" class="baf-size" data-size="${esc(r.label)}"><span>${esc(r.label)}</span><b>$${r.total}</b></button>`).join('')}</div>`;
   }
   const notes = q.ok ? q.notes.map(n => `<p class="note">${esc(n)}</p>`).join('') : '';
   return `
@@ -210,10 +210,6 @@ function renderBaf(q, baf, o2) {
       </div>
       ${body}
       ${notes}
-      <div class="baf-ctrl" role="group" aria-label="自備環保杯">
-        <button type="button" class="baf-eco" data-cup="1" aria-pressed="${baf.eco1}">第 1 杯帶環保杯</button>
-        <button type="button" class="baf-eco" data-cup="2" aria-pressed="${baf.eco2}">第 2 杯帶環保杯</button>
-      </div>
       <p class="baf-second">第 2 杯：<b>${baf.second ? esc(o2?.kind === 'drink' ? o2.summary.name : baf.second) : '和第 1 杯一樣'}</b>
         <button type="button" class="link-btn baf-change">換一杯</button>${baf.second ? '<button type="button" class="link-btn baf-same">改回一樣</button>' : ''}</p>
       ${baf.editing ? `
@@ -361,7 +357,8 @@ function setupCard(row, firstOrder, baseText) {
   let ice = showIce ? '正常冰' : null;
   let choice = null;
   // 買一送一券：點單有提到買一送一／BAF 就直接打開
-  const baf = { on: !!firstOrder.baf, eco1: !!firstOrder.eco, eco2: !!firstOrder.eco, second: null, size: null, editing: false };
+  // 環保杯不在這裡設定（店長：太亂）；規則寫在「買一送一券規則」裡
+  const baf = { on: !!firstOrder.baf, second: null, size: null, editing: false };
 
   const current = () => {
     const text = baseText + (ice && ice !== '正常冰' ? ice : '');
@@ -382,7 +379,7 @@ function setupCard(row, firstOrder, baseText) {
       const hint = o2?.kind === 'choose' ? `名稱有「${o2.said}」的有好幾杯，請打完整品名，例如：${o2.options.slice(0, 3).map(x => x.name).join('、')}。` : '看不懂第 2 杯，請打菜單上的品名。';
       return { q: { ok: false, error: hint }, o2 };
     }
-    return { q: bafQuote(o1, o2, { eco1: baf.eco1, eco2: baf.eco2 }), o2 };
+    return { q: bafQuote(o1, o2), o2 };
   };
 
   const draw = () => {
@@ -398,7 +395,6 @@ function setupCard(row, firstOrder, baseText) {
     on('.baf-toggle', () => { baf.on = true; draw(); note('用BAF券'); });
     on('.baf-off', () => { baf.on = false; baf.editing = false; draw(); });
     on('.baf-size', e => { baf.size = e.currentTarget.dataset.size; draw(); note(`BAF ${baf.size}`); });
-    on('.baf-eco', e => { const k = `eco${e.currentTarget.dataset.cup}`; baf[k] = !baf[k]; draw(); });
     on('.baf-change', () => { baf.editing = true; draw(); bubble.querySelector('.baf-input')?.focus(); });
     on('.baf-same', () => { baf.second = null; baf.editing = false; draw(); });
     bubble.querySelector('.baf-form')?.addEventListener('submit', e => {
