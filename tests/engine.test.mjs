@@ -334,6 +334,68 @@ t('正確的說法不動', () => {
   assert.equal(fixFacts(ok), ok);
 });
 
+console.log('店內菜單（2026/10/12）');
+import { readFileSync } from 'node:fs';
+const MENU = readFileSync(new URL('../data/menu-2026-10-12.csv', import.meta.url), 'utf8').replace(/^﻿/, '').trim().split(/\r?\n/).slice(1).map(line => {
+  const out = []; let cur = '', q = false;
+  for (const c of line) { if (c === '"') { q = !q; continue; } if (c === ',' && !q) { out.push(cur); cur = ''; continue; } cur += c; }
+  out.push(cur);
+  return { name: out[4], marker: out[3], p: [out[8], out[9], out[10]].map(x => (x ? Number(x) : null)), other: out[11], notes: out[12], map: out[13].split('、') };
+});
+t('菜單 57 列都對應到飲品資料，價格一致', () => {
+  assert.equal(MENU.length, 57);
+  for (const r of MENU) for (const n of r.map) {
+    const d = DRINKS.find(x => x.n === n);
+    assert.ok(d, `找不到 ${n}`);
+    if (d.sz) assert.equal(d.sz.map(([l, p]) => `${l} ${p}`).join('; '), r.other, n);
+    else assert.deepEqual(d.p.slice(1), r.p, `${n}（菜單：${r.name}）`);
+  }
+});
+t('菜單標示 → 資料旗標（不提供客製化、不提供冰塊客製化、●、○）', () => {
+  for (const r of MENU) for (const n of r.map) {
+    const d = DRINKS.find(x => x.n === n);
+    assert.equal(!!d.nocustom, /不提供客製化服務/.test(r.notes), `nocustom ${n}`);
+    assert.equal(!!d.noicecustom, /不提供冰塊客製化/.test(r.notes), `noicecustom ${n}`);
+    const isFruitTea = /果茶$/.test(n);
+    if (!/（紅茶\/○果茶）/.test(r.name)) assert.equal(!!d.sweetAdj, r.marker.includes('•'), `sweetAdj ${n}`);
+    if (!/^冰搖(檸檬)?(紅|果)茶$/.test(n)) assert.equal(!!d.decaf, r.marker.includes('○'), `decaf ${n}`);
+    else assert.equal(!!d.decaf, isFruitTea, `decaf ${n}`);
+  }
+});
+t('特選蜜柚雲朵泡泡美式咖啡：依菜單 145／160／175', () => assert.deepEqual(DRINKS.find(d => d.id === 1000).p, [null, 145, 160, 175]));
+t('不提供客製化的飲品：去冰、補飲料都不算錢並標示不提供', () => {
+  const o = order('草莓巴西莓椰奶星沁爽去冰補飲料');
+  assert.equal(o.addTotal, 0);
+  assert.ok(o.lines.every(l => l.status === '不提供'));
+  assert.ok(!o.ask);
+});
+t('不提供冰塊客製化：星冰樂去冰不行，加鮮奶油照算', () => {
+  assert.equal(order('焦糖星冰樂去冰').lines[0].status, '不提供');
+  assert.equal(order('焦糖星冰樂加鮮奶油').addTotal, 15);
+});
+t('「加鮮奶油」不會被當成加牛奶', () => assert.deepEqual(order('冰那堤加鮮奶油').lines.map(l => l.id), ['o_cream']));
+t('冰搖茶／冰搖檸檬茶 → 列出紅茶、果茶讓人選', () => {
+  assert.equal(buildOrder('冰搖茶').kind, 'choose');
+  assert.deepEqual(buildOrder('冰搖茶').options.map(o => o.text), ['冰搖紅茶', '冰搖果茶']);
+  assert.equal(buildOrder('冰搖檸檬茶大杯').options.length, 2);
+});
+t('菜單沒寫含奶的飲品：不說不含奶、不推薦給過敏', () => {
+  const o = order('冰西印度櫻桃紅茶少冰');
+  assert.ok(!/不含奶/.test([...o.notes, ...o.tips].join('')));
+  assert.ok(!dietSafe(DRINKS.find(d => d.n === '冰搖果茶')));
+});
+t('可調整甜度（●）與沒標示的飲品說明不同', () => {
+  assert.ok(/可調整甜度/.test(order('冰醇濃抹茶那堤半糖').notes.join('')));
+  assert.ok(/沒有在這杯標示/.test(order('冰福吉茶那堤半糖').notes.join('')));
+});
+t('濃縮咖啡問題附上單點價格 Solo／Doppio', () => assert.ok(/Solo \*\*\$85\*\*/.test(reply('濃縮咖啡多少錢').text)));
+t('新主題：提袋、無咖啡因、過敏原、季節限定', () => {
+  assert.ok(/\$2／個/.test(reply('提袋要錢嗎').text));
+  assert.ok(/星沁爽含咖啡因/.test(reply('哪些飲料沒有咖啡因').text));
+  assert.ok(/花生/.test(reply('有哪些過敏原').text));
+  assert.ok(/2026\/10\/12–2026\/11\/2/.test(reply('有哪些季節限定').text));
+});
+
 console.log('語意分流');
 const TH = { soft: 0.7, margin: 0.05 };
 const sc = (topic, score) => ({ topic, score, text: topic });

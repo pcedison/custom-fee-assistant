@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610122213';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify } from './engine.js?v=202610122213';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610122213';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE } from './kb.js?v=202610130159';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify } from './engine.js?v=202610130159';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610130159';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -280,8 +280,8 @@ async function attachImage(row, { regions, plain, caption }) {
   }
 }
 
-const HEALTH_NOTE = '<p class="note">⚠️ 過敏或健康相關需求，請以門市與包裝標示為準；飲品製作過程可能接觸乳製品等過敏原。</p>';
-const ALLERGY_NOTE = '<p class="note">⚠️ 對牛奶過敏：點餐時請先告訴夥伴。奶油、冰淇淋也是乳製品；飲品製作過程可能接觸乳製品，請以門市與包裝標示為準。</p>';
+const HEALTH_NOTE = '<p class="note">⚠️ 店內菜單：現場調製飲料，設備清洗後可能仍無法避免牛奶、大豆、花生、芝麻、芒果、堅果、含麩質之穀物、蛋等過敏原殘留；有疑慮建議點購罐裝飲品。</p>';
+const ALLERGY_NOTE = '<p class="note">⚠️ 對牛奶過敏：點餐時請先告訴夥伴。奶油、冰淇淋也是乳製品。店內菜單註明：設備清洗後可能仍無法避免牛奶等過敏原殘留，有疑慮建議點購罐裝飲品。</p>';
 const healthNote = h => (h === 'allergy' ? ALLERGY_NOTE : HEALTH_NOTE);
 
 function botReply(r, userText) {

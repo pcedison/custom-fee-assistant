@@ -1,0 +1,58 @@
+﻿頁,分類,子分類,標示,品名,種類,英文名,冷熱,中杯,大杯,特大杯,其他杯型,附註,對應飲品資料
+1,每日精選系列 BREWED COFFEE,,,每日精選咖啡,,Brewed Coffee,僅供熱飲,90,100,110,,,每日精選咖啡
+1,每日精選系列 BREWED COFFEE,,,咖啡密斯朵,,Caffè Misto,僅供熱飲,90,100,110,,確保最佳風味，不提供客製化服務,咖啡密斯朵
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,,冷萃咖啡,,Cold Brew,僅供冰飲,125,145,165,,,冷萃咖啡
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,•,夏日冰柚冷萃咖啡,,Honey Ruby Grapefruit Cold Brew,僅供冰飲,140,160,180,,確保最佳風味，不提供冰塊客製化服務,夏日冰柚冷萃咖啡
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,•,經典特調冷萃咖啡,,Vanilla Sweet Cream Cold Brew,僅供冰飲,150,170,190,,,經典特調冷萃咖啡
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,•,香檸蜜柚冷萃咖啡,,Ruby Grapefruit & Honey Lemonade Cold Brew,僅供冰飲,140,160,180,,,香檸蜜柚冷萃咖啡
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,•,檸檬冷萃咖啡,,Lemonade Cold Brew,僅供冰飲,140,160,180,,,檸檬冷萃咖啡
+1,每日精選系列 BREWED COFFEE,冷萃系列僅供冰飲，每日限量供應,,紅心芭樂冷萃咖啡,,Guava Lemonade Cold Brew,僅供冰飲,140,160,180,,確保最佳風味，不提供客製化服務,紅心芭樂冷萃咖啡
+1,茶瓦納 TEAVANA,醇濃抹茶 PURE MATCHA,•,醇濃抹茶那堤,,Pure Matcha Latte,冷飲或熱飲,145,160,175,,,醇濃抹茶那堤、冰醇濃抹茶那堤
+1,茶瓦納 TEAVANA,茶那堤 TEA LATTE,,福吉茶那堤,,Hojicha Tea Latte,冷飲或熱飲,140,155,170,,,福吉茶那堤、冰福吉茶那堤
+1,茶瓦納 TEAVANA,茶那堤 TEA LATTE,•,經典紅茶那堤,,Black Tea Latte,冷飲或熱飲,140,155,170,,,經典紅茶那堤、冰經典紅茶那堤
+1,茶瓦納 TEAVANA,茶那堤 TEA LATTE,•,玫瑰蜜香茶那堤,,Rose Fancy Tea Latte,冷飲或熱飲,140,155,170,,,玫瑰蜜香茶那堤、冰玫瑰蜜香茶那堤
+1,茶瓦納 TEAVANA,茶那堤 TEA LATTE,•,伯爵茶那堤,,Earl Grey Tea Latte,冷飲或熱飲,140,155,170,,,伯爵茶那堤、冰伯爵茶那堤
+1,茶瓦納 TEAVANA,蜜柚系列 RUBY GRAPEFRUIT & HONEY,•,阿里山蜜柚烏龍青茶,,Ruby Grapefruit Alishan Oolong Tea,冷飲或熱飲,155,170,185,,,阿里山蜜柚烏龍青茶
+1,茶瓦納 TEAVANA,蜜柚系列 RUBY GRAPEFRUIT & HONEY,•,蜜柚紅茶,,Black Tea with Ruby Grapefruit & Honey,冷飲或熱飲,135,150,165,,,熱蜜柚紅茶、冰蜜柚紅茶
+1,茶瓦納 TEAVANA,蜜柚系列 RUBY GRAPEFRUIT & HONEY,○•,蜜柚檸檬果茶,,Iced Shaken Ruby Grapefruit Lemon Passion Tea,冷飲或熱飲,135,150,165,,,蜜柚檸檬果茶
+1,茶瓦納 TEAVANA,清新茶 REFRESHING TEA,•,冰搖檸檬茶,（紅茶/○果茶）,Iced Shaken Lemon Tea (Black/Passion),冷飲或熱飲,120,130,140,,,冰搖檸檬紅茶、冰搖檸檬果茶
+1,茶瓦納 TEAVANA,清新茶 REFRESHING TEA,•,冰搖茶,（紅茶/○果茶）,Iced Shaken Tea (Black/Passion),冷飲或熱飲,105,115,125,,,冰搖紅茶、冰搖果茶
+1,茶瓦納 TEAVANA,清新茶 REFRESHING TEA,•,西印度櫻桃紅茶,,Acerola Cherry Black Tea,冷飲或熱飲,135,150,165,,,西印度櫻桃紅茶、冰西印度櫻桃紅茶
+2,,純茶 PURE TEA,,阿里山烏龍茶,,Alishan Oolong Tea,冷飲或熱飲,150,,190,,確保最佳風味，不提供客製化服務,阿里山烏龍茶、冰阿里山烏龍茶
+2,,純茶 PURE TEA,,伯爵茶,,Earl Grey Black Tea Blend,僅供熱飲,120,,160,,確保最佳風味，不提供客製化服務,伯爵茶
+2,,純茶 PURE TEA,,英式紅茶,,English Breakfast Black Tea,僅供熱飲,120,,160,,確保最佳風味，不提供客製化服務,英式紅茶
+2,,純茶 PURE TEA,○,洋甘菊花草茶,,Chamomile Herbal Blend,僅供熱飲,120,,160,,確保最佳風味，不提供客製化服務,洋甘菊花草茶
+2,星沁爽 STARBUCKS REFRESHERS,,,草莓巴西莓檸檬風味,,Strawberry Açaí with Lemonade,,95,110,125,,此飲品含咖啡因（咖啡生豆萃取）；確保最佳風味，不提供客製化服務,草莓巴西莓檸檬風味星沁爽
+2,星沁爽 STARBUCKS REFRESHERS,,,草莓巴西莓椰奶風味,,Pink Drink with Strawberry Açaí,,105,120,135,,此飲品含咖啡因（咖啡生豆萃取）；確保最佳風味，不提供客製化服務；含堅果類及其製品 made with coconutmilk,草莓巴西莓椰奶風味星沁爽
+2,星沁爽 STARBUCKS REFRESHERS,,,芒果火龍果檸檬,,Mango Dragonfruit with Lemonade,,95,110,125,,此飲品含咖啡因（咖啡生豆萃取）；確保最佳風味，不提供客製化服務；含芒果及其製品,芒果火龍果檸檬星沁爽
+2,星沁爽 STARBUCKS REFRESHERS,,,芒果火龍果椰奶,,Dragon Drink with Mango Dragonfruit,,105,120,135,,此飲品含咖啡因（咖啡生豆萃取）；確保最佳風味，不提供客製化服務；含芒果、堅果類及其製品 made with coconutmilk,芒果火龍果椰奶星沁爽
+2,星冰樂系列 FRAPPUCCINO,星冰樂咖啡系列 COFFEE FRAPPUCCINO,•,焦糖咖啡,,Caramel,,140,160,180,,確保最佳風味，不提供冰塊客製化服務,焦糖星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂咖啡系列 COFFEE FRAPPUCCINO,•,焦糖可可碎片,,Caramel Java Chip,,155,175,195,,確保最佳風味，不提供冰塊客製化服務,焦糖可可碎片星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂咖啡系列 COFFEE FRAPPUCCINO,•,摩卡可可碎片,,Java Chip,,155,175,195,,確保最佳風味，不提供冰塊客製化服務,摩卡可可碎片星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂無咖啡系列 CREAM FRAPPUCCINO,•,巧克力可可碎片,,Chocolate Cream Java Chip,,130,150,170,,確保最佳風味，不提供冰塊客製化服務,巧克力可可碎片星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂無咖啡系列 CREAM FRAPPUCCINO,○•,香草風味,,Vanilla Cream,,105,125,145,,確保最佳風味，不提供冰塊客製化服務,香草風味星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂無咖啡系列 CREAM FRAPPUCCINO,•,醇濃抹茶,,Pure Matcha Cream,,155,175,195,,確保最佳風味，不提供冰塊客製化服務,醇濃抹茶星冰樂
+2,星冰樂系列 FRAPPUCCINO,星冰樂果汁系列 BLENDED JUICE DRINK,○,雙果果汁,,Mango Passion Fruit,,125,145,165,,確保最佳風味，不提供客製化服務,雙果果汁星冰樂
+2,巧克力及牛奶 CHOCOLATE & MILK,,,經典巧克力,,Signature Chocolate,冷飲或熱飲,145,160,175,,,經典巧克力、冰經典巧克力
+2,巧克力及牛奶 CHOCOLATE & MILK,,○,熱牛奶,,Steamed Milk,冷飲或熱飲,115,130,145,,,熱牛奶
+3,季節限定飲品 SEASONAL SELECTS,,,芒果火龍果冰雪星沁爽,,Frozen Mango Dragonfruit Lemonade Starbucks Refreshers Beverage,冷飲或熱飲,115,130,145,,含芒果及其製品；確保最佳風味，不提供客製化服務,芒果火龍果冰雪星沁爽
+3,季節限定飲品 SEASONAL SELECTS,,,草莓巴西莓風味冰雪星沁爽,,Frozen Strawberry Acai Lemonade Starbucks Refreshers Beverage,冷飲或熱飲,115,130,145,,確保最佳風味，不提供客製化服務,草莓巴西莓風味冰雪星沁爽
+3,季節限定飲品 SEASONAL SELECTS,,•,冰搖烤夏威夷果燕麥咖啡,,Roasted Macadamia Oatmilk Iced Shaken Espresso,冷飲或熱飲,165,180,195,,,冰搖烤夏威夷果燕麥咖啡
+3,季節限定飲品 SEASONAL SELECTS,,•,烤夏威夷果燕麥那堤,,Roasted Macadamia Oatmilk Latte,冷飲或熱飲,170,185,200,,,烤夏威夷果燕麥那堤、冰烤夏威夷果燕麥那堤
+3,季節限定飲品 SEASONAL SELECTS,,•,烤夏威夷果燕麥星冰樂,,Roasted Macadamia Oatmilk Frappuccino,冷飲或熱飲,170,190,210,,確保最佳風味 不提供冰塊客製化服務,烤夏威夷果燕麥星冰樂
+3,季節限定飲品 SEASONAL SELECTS,,•,冰香草風味蛋白雲朵那堤,,Iced Vanilla Cream Protein Latte,冷飲或熱飲,185,200,215,,,冰香草風味蛋白雲朵那堤
+3,季節限定飲品 SEASONAL SELECTS,,•,冰可可蛋白雲朵那堤,,Iced Chocolate Cream Protein Latte,冷飲或熱飲,185,200,215,,,冰可可蛋白雲朵那堤
+3,季節限定飲品 SEASONAL SELECTS,,•,米香桂花那堤,,Osmanthus Rice Flavored Latte,冷飲或熱飲,160,175,190,,,米香桂花那堤、冰米香桂花那堤
+3,季節限定飲品 SEASONAL SELECTS,,•,米香桂花紅茶那堤,,Osmanthus Rice Flavored Black Tea Latte,冷飲或熱飲,160,175,190,,,米香桂花紅茶那堤、冰米香桂花紅茶那堤
+3,季節限定飲品 SEASONAL SELECTS,,•,鹹焦糖奶油爆米花風味那堤,,Salted Caramel Popcorn Creamy Latte,冷飲或熱飲,,185,,,,鹹焦糖奶油爆米花風味那堤、冰鹹焦糖奶油爆米花風味那堤
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,美式咖啡,,Caffè Americano,冷飲或熱飲,100,115,130,,冰美式 +5元升級雲朵泡泡,美式咖啡、冰美式咖啡
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,特選雲朵泡泡美式咖啡,,Starbucks Aerocano,僅供冰飲,120,135,150,,,特選雲朵泡泡美式咖啡
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,特選蜜柚雲朵泡泡美式咖啡,,Starbucks Honey Ruby Grapefruit Aerocano,僅供冰飲,145,160,175,,,特選蜜柚雲朵泡泡美式咖啡
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,那堤,,Caffè Latte,冷飲或熱飲,125,140,155,,,那堤、冰那堤
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,卡布奇諾,,Cappuccino,僅供熱飲,125,140,155,,,卡布奇諾
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,馥列白,,Flat White,冷飲或熱飲,140,155,170,,,馥列白、冰馥列白
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,特選馥郁那堤,,Espresso Choice Extra Shot Latte,冷飲或熱飲,155,170,185,,,特選馥郁那堤、冰特選馥郁那堤
+4,濃縮咖啡系列 ESPRESSO COFFEE,,•,摩卡,,Caffè Mocha,冷飲或熱飲,140,155,170,,,摩卡、冰摩卡
+4,濃縮咖啡系列 ESPRESSO COFFEE,,•,焦糖瑪奇朵,,Caramel Macchiato,冷飲或熱飲,145,160,175,,,焦糖瑪奇朵、冰焦糖瑪奇朵
+4,濃縮咖啡系列 ESPRESSO COFFEE,,•,可可瑪奇朵,,Cocoa Macchiato,冷飲或熱飲,145,160,175,,,可可瑪奇朵、冰可可瑪奇朵
+4,濃縮咖啡系列 ESPRESSO COFFEE,,,濃縮咖啡,,Espresso,冷飲或熱飲,,,,Solo 85; Doppio 100,,濃縮咖啡
