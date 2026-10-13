@@ -234,12 +234,12 @@ mark.price {
 .choose-btn .ref-comp { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
 .ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
-.ice-btn, .baf-eco {
+.ice-btn {
   flex: 1; min-height: 40px; padding: 6px 8px;
   border: 1px solid var(--line); border-radius: 999px;
   background: var(--paper); font-size: 15px;
 }
-.ice-btn[aria-pressed="true"], .baf-eco[aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); font-weight: 700; }
+.ice-btn[aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); font-weight: 700; }
 .ask {
   padding: 10px 12px; border-radius: 12px;
   border: 1.5px solid var(--marker-solid);
@@ -293,9 +293,6 @@ mark.price {
   border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font-size: 13.5px;
 }
 .baf-size b { font-family: var(--num); font-size: 18px; }
-.baf-size small { font-size: 12px; color: var(--ink-2); }
-.baf-ctrl { display: flex; gap: 6px; }
-.baf-ctrl .baf-eco { font-size: 14px; min-height: 38px; }
 .baf-second { font-size: 14px; }
 .baf-form { display: flex; gap: 6px; }
 .baf-input {
