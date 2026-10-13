@@ -234,12 +234,12 @@ mark.price {
 .choose-btn .ref-comp { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 .ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
 .ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
-.ice-btn {
+.ice-btn, .baf-eco {
   flex: 1; min-height: 40px; padding: 6px 8px;
   border: 1px solid var(--line); border-radius: 999px;
   background: var(--paper); font-size: 15px;
 }
-.ice-btn[aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); font-weight: 700; }
+.ice-btn[aria-pressed="true"], .baf-eco[aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); font-weight: 700; }
 .ask {
   padding: 10px 12px; border-radius: 12px;
   border: 1.5px solid var(--marker-solid);
@@ -257,6 +257,57 @@ mark.price {
 .ask-btn[data-choice="yes"][aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #FFFDF9; }
 .ask-btn[data-choice="no"][aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); }
 .ask-btn:active { transform: translateY(1px); }
+
+/* 買一送一券（BAF） */
+.baf-entry { margin-top: 10px !important; }
+.baf-toggle {
+  width: 100%; min-height: 42px; padding: 8px 12px;
+  border: 1.5px dashed var(--marker-solid); border-radius: 12px;
+  background: var(--paper); color: var(--ink); font-size: 15px; font-weight: 700;
+}
+.baf {
+  margin-top: 10px !important; padding: 10px 12px; border-radius: 12px;
+  border: 1.5px solid var(--marker-solid);
+  background: color-mix(in srgb, var(--marker-solid) 8%, var(--paper));
+}
+.baf > * + * { margin-top: 0.5em; }
+.baf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.baf-title { font-size: 16px; font-weight: 700; }
+.baf-off, .link-btn {
+  border: 0; background: none; padding: 4px 2px; font-size: 13.5px;
+  color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px;
+}
+.baf-cup { padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.baf-cup-name { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; line-height: 1.45; }
+.baf-role {
+  flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: var(--user-bg); color: var(--user-ink);
+}
+.baf-role.free { background: var(--accent); color: #FFFDF9; }
+.baf-calc { font-size: 14px; color: var(--ink-2); font-family: var(--num); }
+.baf-calc mark.price { color: var(--ink); font-weight: 700; }
+.baf-pick { font-size: 14px; color: var(--ink-2); }
+.baf-sizes { display: flex; gap: 6px; }
+.baf-size {
+  flex: 1; display: grid; gap: 1px; justify-items: center; padding: 8px 6px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font-size: 13.5px;
+}
+.baf-size b { font-family: var(--num); font-size: 18px; }
+.baf-size small { font-size: 12px; color: var(--ink-2); }
+.baf-ctrl { display: flex; gap: 6px; }
+.baf-ctrl .baf-eco { font-size: 14px; min-height: 38px; }
+.baf-second { font-size: 14px; }
+.baf-form { display: flex; gap: 6px; }
+.baf-input {
+  flex: 1; min-width: 0; padding: 8px 12px; font-size: 16px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink);
+}
+.baf-go {
+  flex: none; padding: 8px 16px; border: 0; border-radius: 10px;
+  background: var(--accent); color: #FFFDF9; font-weight: 700; font-size: 15px;
+}
+.baf-rules summary { font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
+.baf-rules ul { margin: 0.4em 0 0; padding-left: 1.15em; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
 
 /* 標示圖片 */
 figure.shot { margin: 0.75em 0 0; }
