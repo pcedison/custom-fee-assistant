@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610122213';
-import { DRINKS, DRINK_ALIASES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610122213';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610130159';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610130159';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -417,9 +417,25 @@ export function matchSweet(text) {
 
 const GROUP_TOPIC2 = { ice: 'ice', esp: 'espresso', milk: 'milk', syrup: 'syrup', other: 'other', protein: 'protein' };
 
+// 卡片上的附註：店內菜單的標示優先
+export function drinkInfo(d) {
+  return [
+    d.offMenu ? '店內菜單（2026/10/12–11/2）未列，供應以門市為準' : '',
+    d.nocustom ? '不提供客製化服務' : d.noicecustom ? '不提供冰塊客製化服務' : '',
+    d.limited || '',
+    d.upgrade || '',
+    d.caffeine || '',
+    d.decaf ? '無咖啡因飲品（器具共用，可能有些許咖啡因殘留）' : '',
+    d.allergen || '',
+    d.m === 'unknown' ? '菜單沒有寫是否含奶，請洽門市夥伴' : '',
+    d.note || '',
+    d.season ? '季節限定，依門市供應為準' : '',
+  ].filter(Boolean).join('；');
+}
+
 function drinkSummary(pk) {
   const d = pk.drink;
-  const sizes = d.p.map((p, i) => (p == null ? null : `${SIZE_LABEL[i]} $${p}`)).filter(Boolean);
+  const sizes = d.sz ? d.sz.map(([l, p]) => `${l} $${p}`) : d.p.map((p, i) => (p == null ? null : `${SIZE_LABEL[i]} $${p}`)).filter(Boolean);
   const altPrice = pk.alt && pk.alt.p.join() !== d.p.join();
   return {
     name: pk.tempKnown ? d.n : `${baseName(d.n)}（${pk.alt ? '冰／熱' : d.n}）`.replace(/（(.+)）$/, (m, x) => (x === d.n ? '' : `（${x}）`)),
@@ -428,7 +444,7 @@ function drinkSummary(pk) {
     comp: d.c,
     prices: sizes.join('／') || '價格請洽門市',
     altNote: altPrice ? `${pk.alt.n}：${pk.alt.p.map((p, i) => (p == null ? null : `${SIZE_LABEL[i]} $${p}`)).filter(Boolean).join('／')}` : '',
-    info: [d.note, d.season ? '季節限定，依門市供應為準' : ''].filter(Boolean).join('；'),
+    info: drinkInfo(d),
   };
 }
 
@@ -451,6 +467,16 @@ function leftoverWords(rest) {
 
 export function buildOrder(norm) {
   const fixed = fixNames(norm);
+  // 「冰搖茶」「冰搖檸檬茶」：店內菜單一列有紅茶、果茶兩種 → 讓人選
+  for (const [alias, bases] of Object.entries(DRINK_CHOICES)) {
+    const at = fixed.indexOf(alias);
+    if (at === -1 || bases.some(b => fixed.includes(b))) continue;
+    return {
+      kind: 'choose',
+      said: alias,
+      options: bases.map(b => ({ ...drinkSummary(pickVariant(b, fixed, at)), text: fixed.slice(0, at) + b + fixed.slice(at + alias.length) })),
+    };
+  }
   const hits = findDrinks(fixed);
   if (!hits.length) {
     const found = searchDrinks(fixed);
@@ -539,12 +565,18 @@ export function buildOrder(norm) {
   const extraRegions = [];
 
   if (unknown.length) notes.push(`有一段我沒看懂：「${unknown.join('」「')}」。可以換個說法，例如「升級特選」「加一份濃縮」「換燕麥奶」。`);
-  if (d.nocustom && (items.length || sweet)) notes.push('官網註明：這款不提供客製化調整。');
+  // 店內菜單：確保最佳風味，不提供客製化服務 → 加料、換奶、冰量、甜度都不行（環保杯、杯型照常）
+  if (d.nocustom && (items.length || sweet)) {
+    notes.push(`店內菜單註明：${dn}確保最佳風味，不提供客製化服務。`);
+    const lines0 = items.map(f => ({ id: f.item.id, label: f.item.label, amount: null, blocked: true, status: '不提供' }));
+    if (sweet) lines0.push({ id: 'sweet', label: `調整甜度（${sweet}）`, amount: null, blocked: true, status: '不提供' });
+    lines.push(...lines0);
+  }
 
   // ---- 濃縮咖啡：先看這杯本身有沒有濃縮 ----
-  const up = items.find(f => f.item.id === 'esp_upgrade');
-  const ex = items.find(f => f.item.id === 'esp_extra');
-  const decaf = items.find(f => f.item.id === 'esp_decaf');
+  const up = d.nocustom ? null : items.find(f => f.item.id === 'esp_upgrade');
+  const ex = d.nocustom ? null : items.find(f => f.item.id === 'esp_extra');
+  const decaf = d.nocustom ? null : items.find(f => f.item.id === 'esp_decaf');
   if (!hasEspresso(d)) {
     if (up || ex) {
       const shots = Math.max(up?.qty || 0, ex?.qty || 0, 1);
@@ -582,7 +614,7 @@ export function buildOrder(norm) {
     if (decaf) lines.push({ id: 'esp_decaf', label: '低咖啡因', amount: 0 });
   }
 
-  for (const f of items) {
+  for (const f of (d.nocustom ? [] : items)) {
     const it = f.item;
     if (it.group === 'esp') continue;
     let label = it.label;
@@ -591,7 +623,11 @@ export function buildOrder(norm) {
 
     if (it.id === 'ice_less') {
       if (d.t === 'hot') { notes.push('熱飲沒有冰塊，不需要調整冰量。'); continue; }
-      if (d.noice) { notes.push('官網註明：這款不開放冰塊、甜度調整。'); continue; }
+      if (d.noicecustom) {
+        notes.push(`店內菜單註明：${dn}確保最佳風味，不提供冰塊客製化服務。`);
+        lines.push({ id: 'ice_less', label: (itemsText.match(/少冰|去冰|微冰|不要冰|無冰/) || ['少冰／去冰'])[0], amount: null, blocked: true, status: '不提供' });
+        continue;
+      }
       if (d.t === 'blended') notes.push('冰沙類飲品的冰量調整，請以門市為準。');
       label = (itemsText.match(/少冰|去冰|微冰|不要冰|無冰/) || ['少冰／去冰'])[0];
     } else if (it.id === 'ice_milk' || it.id === 'ice_drink') {
@@ -602,6 +638,11 @@ export function buildOrder(norm) {
       if (d.t === 'hot') {
         amount = null; label = asMilk ? '補牛奶' : '補飲料';
         notes.push('熱飲沒有冰塊，不適用補牛奶／補飲料；熱飲想多加牛奶，請以門市為準。');
+      } else if (d.noicecustom) {
+        amount = null; label = asMilk ? '補牛奶' : '補飲料';
+        notes.push(`店內菜單註明：${dn}不提供冰塊客製化服務，所以也沒有少冰／去冰後補滿。`);
+        lines.push({ id: lineId, label, amount, blocked: true, status: '不提供' });
+        continue;
       } else if (rt === 'nocb') {
         amount = null; label = asMilk ? '補牛奶' : `補${d.fill || '冷萃'}`;
         notes.push(`冷萃類飲品不能補。${asMilk ? '想加牛奶請以門市為準。' : ''}`);
@@ -654,21 +695,21 @@ export function buildOrder(norm) {
     lines.push({ id: it.id, label, amount });
   }
 
-  if (sweet) {
-    lines.push({ id: 'sweet', label: `調整甜度（${sweet}）`, amount: null });
-    if (d.noice) { /* 冰雪星沁爽：上面已提醒不開放甜度調整 */ }
-    else if (d.sauce) {
-      const sauceName = d.sauce.split('為維持')[0];
-      notes.push(`調整甜度圖表沒有列價格。這杯的甜味來自${sauceName}，官網註明${sauceName}為維持風味最少 1 匙。`);
+  if (sweet && !d.nocustom) {
+    const sauceNote = d.sauce ? `這杯的甜味來自${d.sauce.split('為維持')[0]}，官網註明為維持風味最少 1 匙。` : '';
+    if (d.sweetAdj) {
+      lines.push({ id: 'sweet', label: `調整甜度（${sweet}）`, amount: null, status: '可減量' });
+      notes.push(`店內菜單標示這杯「● 可調整甜度」：原飲品甜度可依個人喜好提供減量服務；要額外加糖漿或配料，才依額外添加 +$15 計價。${sauceNote}`);
     } else {
-      notes.push('調整甜度圖表沒有列價格（圖上標示「調整甜度 風味不變」），請以門市為準。');
+      lines.push({ id: 'sweet', label: `調整甜度（${sweet}）`, amount: null });
+      notes.push(`店內菜單沒有在這杯標示「● 可調整甜度」，能不能調整請以門市為準。${sauceNote}`);
     }
     extraRegions.push('sweet_btn');
   }
 
   // 只說少冰／去冰、沒說要補：不算錢，但立刻反問要不要補
   let ask = null;
-  if (iceLess && !refill && !d.noice) {
+  if (iceLess && !refill && !d.nocustom && !d.noicecustom) {
     if (rt === 'milk') {
       ask = { add: `補${milkWord}`, q: `需要補${milkWord}嗎？`, yes: `要補${milkWord}`,
         sub: `補${milkWord} +$15；只${iceWord}、沒有要補，就不加價。` };
@@ -680,7 +721,7 @@ export function buildOrder(norm) {
     } else if (rt === 'nocb') {
       tips.push(`冷萃類飲品不能補，只${iceWord}不加價。`);
     } else if (rt === 'ask') {
-      tips.push(`這杯${milky ? '' : '不含奶，'}只${iceWord}不加價；能不能補飲料請以門市為準（補飲料 +$15）。`);
+      tips.push(`這杯${milky || d.m === 'unknown' ? '' : '不含奶，'}只${iceWord}不加價；能不能補飲料請以門市為準（補飲料 +$15）。`);
     }
   }
 
@@ -701,7 +742,9 @@ export function buildOrder(norm) {
     }
   }
   const addTotal = lines.reduce((sum, l) => sum + (l.amount || 0), 0);
-  const sizeTotals = d.p.map((p, i) => (p == null ? null : { label: SIZE_LABEL[i], total: p + addTotal })).filter(Boolean);
+  const sizeTotals = d.sz
+    ? d.sz.map(([label, p]) => ({ label, total: p + addTotal }))
+    : d.p.map((p, i) => (p == null ? null : { label: SIZE_LABEL[i], total: p + addTotal })).filter(Boolean);
 
   const topicIds = uniq([
     ...items.map(f => (f.item.id === 'o_matcha' ? 'matcha' : GROUP_TOPIC2[f.item.group])),
@@ -716,7 +759,7 @@ export function buildOrder(norm) {
     sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
     basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord, match,
     // 冰飲、可補、還沒指定冰量 → 卡片上給「正常冰／少冰／去冰」按鈕
-    iceSelectable: d.t === 'iced' && !iceLess && !refill && !d.noice && (rt === 'milk' || rt === 'tea'),
+    iceSelectable: d.t === 'iced' && !iceLess && !refill && !d.nocustom && !d.noicecustom && (rt === 'milk' || rt === 'tea'),
     regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
     topics: topicIds,
     fixed,
