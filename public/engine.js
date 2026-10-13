@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610130159';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610130159';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610131524';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610131524';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -134,7 +134,7 @@ export function detectEco(norm) {
   return !RE_ECO_NEG.test(before);
 }
 export function detectBogo(norm) {
-  return /(買一送一|買1送1|一送一|1送1|bogo|好友分享)/.test(norm);
+  return /(買一送一|買1送1|一送一|1送1|bogo|baf|好友分享|好友券)/.test(norm);
 }
 
 // ---------------------------------------------------------------
@@ -171,13 +171,15 @@ export function computeQuote(norm) {
   }
 
   if (eco) {
-    if (bogo) {
-      lines.push({ id: 'eco', label: '自備環保杯（買一送一不折抵）', amount: 0 });
+    // 買一送一（BAF）：每杯分開算；送的那杯沒有加價就不折（店長 2026/10/13 說明）
+    if (bogo && total <= 0) {
+      lines.push({ id: 'eco', label: '自備環保杯（送的那杯沒有加價不折）', amount: 0 });
     } else {
-      lines.push({ id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
+      lines.push({ id: 'eco', label: bogo ? '自備環保杯（每杯）' : '自備環保杯', amount: -ECO_CUP_DISCOUNT });
       total -= ECO_CUP_DISCOUNT;
     }
   }
+  if (bogo) notes.push('買一送一（BAF 券）：上面是每一杯的加價，兩杯分別計算；付費那杯另付飲品原價。打飲品名稱加「用BAF券」，可以算兩杯的總價。');
 
   const ids = items.map(f => f.item.id);
   if ((ids.includes('ice_milk') || ids.includes('ice_drink')) && !ids.includes('ice_less')) {
@@ -725,11 +727,7 @@ export function buildOrder(norm) {
     }
   }
 
-  if (eco) {
-    lines.push(bogo
-      ? { id: 'eco', label: '自備環保杯（買一送一不折抵）', amount: 0 }
-      : { id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
-  }
+  if (eco) lines.push({ id: 'eco', label: '自備環保杯', amount: -ECO_CUP_DISCOUNT });
 
   if (lines.some(l => l.amount == null && !l.status)) notes.push('標示「未列價」的項目沒有算進合計。');
 
@@ -758,6 +756,7 @@ export function buildOrder(norm) {
     tempKnown: pk.tempKnown,
     sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
     basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord, match,
+    eco, baf: bogo, // 點單裡提到買一送一／BAF → 卡片直接打開 BAF 試算
     // 冰飲、可補、還沒指定冰量 → 卡片上給「正常冰／少冰／去冰」按鈕
     iceSelectable: d.t === 'iced' && !iceLess && !refill && !d.nocustom && !d.noicecustom && (rt === 'milk' || rt === 'tea'),
     regions: uniq([...items.filter(f => lines.some(l => l.id === f.item.id)).flatMap(f => f.item.regions), ...extraRegions]),
@@ -938,6 +937,19 @@ export function localReply(input, state = {}) {
           pending: null,
         };
       }
+    }
+  }
+
+  // 「用BAF券」「買一送一呢」：沿用上一杯，打開買一送一試算
+  if (state.lastOrder && detectBogo(norm)
+    && !norm.replace(RE_BAF_CMD, '').replace(/[呢嗎吧啊的了喔?？!！。,，、\s]|多少錢?|算一下|幫我算|這杯|那杯|一樣/g, '')) {
+    const o = buildOrder(state.lastOrder);
+    if (o?.kind === 'drink') {
+      o.baf = true;
+      return {
+        source: 'local', text: orderToText(o), order: o, orderText: state.lastOrder,
+        topics: ['bogo'], itemRegions: o.regions, chips: ['買一送一可以用環保杯嗎？'], pending: null,
+      };
     }
   }
 
@@ -1234,3 +1246,57 @@ export function guardDietReply(diet, p, { inherited = false } = {}) {
   const more = fb.refs.filter(r => !safeRefs.some(x => x.text === r.text));
   return { text: fb.text, refs: [...safeRefs, ...more].slice(0, 4), status: 'replaced', problems };
 }
+
+// ---------------------------------------------------------------
+// 買一送一券（BAF，bring a friend）試算
+//   券面規定＋店長 2026/10/13 說明：
+//   - 兩杯冷熱一致、大小一致；現場點、現場一次領取
+//   - 一杯付飲品原價，另一杯飲品免費；兩杯的客製化都照規則收費（換燕麥奶／杏仁奶兩杯各 +$20）
+//   - 自備環保杯：付費那杯照折 $10；送的那杯有加價才折 $10，沒有付錢就不折
+//   - 兩杯不同時，以價格較低的那杯為贈送杯（券面沒寫，待店長確認）
+// ---------------------------------------------------------------
+const tempOf = d => (d.t === 'hot' ? 'hot' : (d.t === 'iced' || d.t === 'blended') ? 'cold' : null);
+const sizesOf = d => (d.sz ? d.sz.map(([label, p]) => ({ label, p }))
+  : d.p.map((p, i) => ({ label: SIZE_LABEL[i], p })).filter(x => x.p != null));
+const addOf = o => o.lines.filter(l => l.id !== 'eco' && typeof l.amount === 'number').reduce((s, l) => s + l.amount, 0);
+const cupName = o => {
+  const extras = o.lines.filter(l => l.id !== 'eco' && typeof l.amount === 'number' && l.amount !== 0).map(l => l.label.replace(/（.*）$/, ''));
+  return `${o.summary.name.replace(/（.*）$/, '')}${extras.length ? `＋${extras.join('、')}` : ''}`;
+};
+
+export function bafQuote(o1, o2, { eco1 = false, eco2 = false } = {}) {
+  if (!o1 || o1.kind !== 'drink' || !o2 || o2.kind !== 'drink') return { ok: false, error: '兩杯都要是菜單上的飲品。' };
+  const d1 = o1.drink, d2 = o2.drink;
+  const t1 = tempOf(d1), t2 = tempOf(d2);
+  if (t1 && t2 && t1 !== t2) return { ok: false, error: '用買一送一券時，兩杯要冷熱一致（都是冰的，或都是熱的）。' };
+  if (o1.sizeIdx != null && o2.sizeIdx != null && o1.sizeIdx !== o2.sizeIdx) return { ok: false, error: '用買一送一券時，兩杯大小要一致。' };
+  const want = o1.sizeLabel || o2.sizeLabel;
+  const s2 = new Map(sizesOf(d2).map(x => [x.label, x.p]));
+  const sizes = sizesOf(d1).filter(x => s2.has(x.label) && (!want || x.label === want));
+  if (!sizes.length) return { ok: false, error: want ? `這兩杯沒有共同的${want}。` : '這兩杯沒有相同的杯型可以選。' };
+  const add1 = addOf(o1), add2 = addOf(o2);
+  const rows = sizes.map(({ label, p: b1 }) => {
+    const b2 = s2.get(label);
+    const freeIs2 = b2 <= b1;
+    const cup = (o, base, add, eco, free) => {
+      const ecoOff = eco && (!free || add > 0) ? ECO_CUP_DISCOUNT : 0;
+      return { name: cupName(o), role: free ? '送' : '付費', base: free ? 0 : base, listBase: base, add, eco, ecoOff, pay: Math.max(0, (free ? 0 : base) + add - ecoOff) };
+    };
+    const c1 = cup(o1, b1, add1, eco1, !freeIs2);
+    const c2 = cup(o2, b2, add2, eco2, freeIs2);
+    const total = c1.pay + c2.pay;
+    const original = (b1 + add1 - (eco1 ? ECO_CUP_DISCOUNT : 0)) + (b2 + add2 - (eco2 ? ECO_CUP_DISCOUNT : 0));
+    return { label, cups: [c1, c2], total, original, saved: original - total };
+  });
+  const notes = [];
+  const free = rows[0].cups.find(c => c.role === '送');
+  if (free.eco && free.add === 0) notes.push('送的那杯沒有加價，所以環保杯不再折 $10。');
+  if (d1.n !== d2.n || add1 !== add2) notes.push('兩杯不同時，以價格較低的那杯為贈送杯，實際以門市結帳為準。');
+  if (o1.lines.concat(o2.lines).some(l => /^milk_(oat|almond)$/.test(l.id) && l.amount > 0)) {
+    notes.push('券面規定：換燕麥奶或杏仁奶，兩杯皆需分別加價。');
+  }
+  return { ok: true, rows, notes, sizeKnown: !!want };
+}
+
+// 「用BAF券」：上一杯的點單沿用到兩杯
+export const RE_BAF_CMD = /(用|使用|有)?(baf|買一送一|買1送1|好友分享|好友)(券|卷|卡)?/;
