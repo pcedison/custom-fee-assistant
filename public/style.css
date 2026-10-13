@@ -1,36 +1,50 @@
 /* =============================================================
    客製化加價小幫手：冷灰底、深咖啡字、螢光橘只用在「重點」上
    ============================================================= */
+/* 品牌綠：Starbucks Green #006241、Accent Green #00754A、House Green #1E3932、Light Green #D4E9E2、Warm Neutral #F2F0EB
+   橘色只留給「收費圖表上的螢光筆」這件事（看不懂 → 標給你看） */
 :root {
-  --bg-outer: #DCE0E5;
-  --bg: #E7EAEE;
-  --surface: #F3F4F6;
+  --bg-outer: #E6E2D9;
+  --bg: #F2F0EB;
+  --surface: #FFFFFF;
   --paper: #FFFFFF;
-  --ink: #2A201B;
-  --ink-2: #6B625C;
-  --line: #D2D7DD;
-  --user-bg: #2A201B;
-  --user-ink: #F7F1EB;
-  --marker: rgba(255, 159, 28, 0.5);
-  --marker-solid: #FF9F1C;
-  --accent: #E98200;
-  --send-ink: #E98200;
+  --ink: #1F1F1F;
+  --ink-2: #63666A;
+  --line: #E1DDD3;
+  --brand: #006241;
+  --accent: #00754A;
+  --accent-ink: #00754A;
+  --house: #1E3932;
+  --tint: #D4E9E2;
+  --user-bg: #006241;
+  --user-ink: #FFFFFF;
+  --marker: #C6E3D7;
+  --marker-solid: #FF9F1C; /* 只給收費圖表的標示用 */
+  --logo-swipe: #00A862;
+  --chart-marker: rgba(255, 159, 28, 0.5);
+  --warn: #8A4B00;
+  --send-ink: #00754A;
   --font: "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", "Heiti TC", system-ui, sans-serif;
   --num: "Archivo", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-outer: #100D0B;
-    --bg: #16120F;
-    --surface: #1E1916;
-    --paper: #29221E;
-    --ink: #EEE6DF;
-    --ink-2: #A89D95;
-    --line: #3A312B;
-    --user-bg: #4A3A2F;
-    --user-ink: #F7F1EB;
-    --marker: rgba(255, 159, 28, 0.36);
+    --bg-outer: #0A1310;
+    --bg: #0F1B17;
+    --surface: #15241F;
+    --paper: #1A2D26;
+    --ink: #F2F0EB;
+    --ink-2: #A3B4AC;
+    --line: #2B443A;
+    --accent: #00754A;
+    --accent-ink: #5CC79C;
+    --tint: #1E3A30;
+    --user-bg: #00754A;
+    --marker: rgba(0, 168, 98, 0.38);
+    --chart-marker: rgba(255, 159, 28, 0.36);
+    --warn: #F2C26B;
+    --send-ink: #00754A;
     color-scheme: dark;
   }
 }
@@ -63,17 +77,17 @@ button { cursor: pointer; }
 .chat-head {
   display: flex; align-items: center; gap: 10px;
   padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: var(--house); color: #FFFFFF;
 }
+.chat-head .avatar { background: #FFFFFF; color: var(--house); border-color: transparent; }
 .head-text { min-width: 0; }
 .chat-head h1 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
-.head-text p { margin: 1px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.head-text p { margin: 1px 0 0; font-size: 12.5px; color: rgba(255, 255, 255, 0.72); }
 .head-btn {
   position: relative;
   margin-left: auto; flex: none;
   display: inline-flex; align-items: center; gap: 5px;
-  border: 1px solid var(--line); background: var(--paper);
+  border: 1px solid rgba(255, 255, 255, 0.4); background: transparent; color: #FFFFFF;
   border-radius: 999px; padding: 6px 12px 6px 9px; font-size: 14px; white-space: nowrap;
 }
 .head-btn svg { width: 18px; height: 18px; }
@@ -82,7 +96,7 @@ button { cursor: pointer; }
 .new-dot {
   display: none; position: absolute; top: -2px; right: -2px;
   width: 11px; height: 11px; border-radius: 50%;
-  background: var(--marker-solid); border: 2px solid var(--surface);
+  background: var(--marker-solid); border: 2px solid var(--house);
 }
 .head-btn[data-new] .new-dot { display: block; }
 @media (max-width: 380px) { .head-btn .lbl-x { display: none; } }
@@ -154,26 +168,79 @@ mark.price {
   box-decoration-break: clone;
 }
 
-/* 試算收據 */
-.receipt-title { font-size: 13px; font-weight: 700; color: var(--ink-2); }
-.receipt-lines {
-  list-style: none; padding: 0 !important; margin: 0.35em 0 0;
-  border-top: 1px dashed var(--line);
+/* ---------- 飲品卡片（一張卡片看完：杯型合計、冰量、加價、環保杯、合計） ---------- */
+.dc > * + * { margin-top: 10px; }
+.dc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dc-name { font-size: 18px; font-weight: 700; line-height: 1.3; }
+.dc-alts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dc-k { flex: none; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.dc-row { display: flex; align-items: center; gap: 10px; }
+.dc-row .seg { flex: 1; }
+
+/* 分段按鈕：選到的整格變綠 */
+.seg {
+  display: flex; min-width: 0;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--paper);
 }
-.receipt-lines li {
-  display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
-  margin: 0; padding: 0.45em 0;
-  border-bottom: 1px dashed var(--line);
-  font-size: 15px;
+.seg button {
+  flex: 1; min-width: 0; min-height: 40px; padding: 4px 6px;
+  border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--ink);
+  font-size: 15px; line-height: 1.2;
 }
-.amt { flex: none; font-family: var(--num); font-size: 15px; color: var(--ink-2); white-space: nowrap; }
-.amt mark.price { color: var(--ink); }
-.receipt-total {
-  display: flex; justify-content: space-between; align-items: baseline;
-  margin-top: 0.55em !important; font-weight: 700; font-size: 16px;
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; font-weight: 700; }
+.seg button[aria-pressed="true"] + button { border-left-color: var(--accent); }
+.dc-mode button { min-height: 36px; font-size: 14.5px; }
+.size-btn { display: grid; justify-items: center; gap: 0; }
+.size-btn span { font-size: 12.5px; opacity: 0.85; }
+.size-btn b { font-family: var(--num); font-size: 17px; font-variant-numeric: tabular-nums; }
+
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  background: var(--bg); font-size: 14px; line-height: 1.3;
 }
-.receipt-total mark.price { font-size: 22px; }
-.receipt-foot { font-size: 12px; color: var(--ink-2); margin-top: 0.15em !important; }
+.pill b { font-family: var(--num); font-weight: 700; }
+.pill.zero { color: var(--ink-2); }
+.pill.off { color: var(--ink-2); background: transparent; border: 1px dashed var(--line); }
+
+.cups { list-style: none; padding: 0 !important; margin-bottom: 0; }
+.cups li {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
+  margin: 0; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 15px;
+}
+.cups li:first-child { border-top: 1px dashed var(--line); }
+.cups b { font-family: var(--num); font-size: 16px; }
+.cup-name { min-width: 0; line-height: 1.4; }
+.role { min-width: 3.4em; text-align: center; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+.role.paid { background: var(--house); color: #FFFFFF; }
+.role.free { background: var(--tint); color: var(--accent-ink); }
+.cup2 { font-size: 13.5px; color: var(--ink-2); }
+
+.warn { font-size: 13.5px; line-height: 1.55; color: var(--warn); }
+.warn::before { content: "! "; font-weight: 700; }
+
+.dc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.dc-foot .dc-row { gap: 8px; }
+.dc-foot .seg button { min-width: 40px; min-height: 36px; }
+.dc-foot .dc-total { display: flex; align-items: baseline; gap: 6px; margin: 0 0 0 auto; padding-right: 4px; white-space: nowrap; }
+.dc-total span { font-size: 13px; color: var(--ink-2); }
+.dc-total mark.price { font-size: 26px; }
+.dc-hint { font-size: 13px; color: var(--ink-2); }
+
+details.more summary {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; color: var(--ink-2); cursor: pointer; list-style: none;
+}
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::after { content: "›"; font-size: 16px; line-height: 1; transition: transform 0.15s; }
+details.more[open] summary::after { transform: rotate(90deg); }
+details.more > :not(summary) { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
+details.more > * + * { margin-top: 0.35em; }
+details.more ul { padding-left: 1.1em; }
+.bubble > details.more { margin-top: 0.4em; }
 
 .refs { margin-top: 10px !important; padding-top: 10px; border-top: 1px dashed var(--line); }
 .refs-title { font-size: 13px; color: var(--ink-2); }
@@ -183,10 +250,10 @@ mark.price {
   border: 1px dashed var(--line); border-radius: 999px; padding: 3px 10px;
 }
 
-/* 飲品卡片 */
+/* 多杯列表、選擇哪一杯、參考飲品 */
 .drink-list { list-style: none; padding: 0 !important; margin: 0; display: grid; gap: 10px; }
 .drink-card { padding: 0 0 10px; border-bottom: 1px dashed var(--line); }
-.drink-list .drink-card:last-child, .bubble > .drink-card:last-child { border-bottom: 0; padding-bottom: 0; }
+.drink-list .drink-card:last-child { border-bottom: 0; padding-bottom: 0; }
 .drink-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .drink-name { font-size: 17px; font-weight: 700; line-height: 1.35; }
 .milk-tag {
@@ -194,106 +261,46 @@ mark.price {
   font-size: 13px; font-weight: 700; line-height: 1; white-space: nowrap;
   padding: 6px 10px; border-radius: 999px;
 }
-.milk-yes { background: var(--user-bg); color: var(--user-ink); }
-.milk-no { background: transparent; color: var(--ink); border: 1.5px solid var(--ink-2); }
+.milk-yes { background: var(--house); color: #FFFFFF; }
+.milk-no { background: transparent; color: var(--accent-ink); border: 1.5px solid var(--accent-ink); }
 .milk-part { background: transparent; color: var(--ink-2); border: 1.5px dashed var(--ink-2); }
 .drink-comp { margin-top: 4px !important; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
 .drink-prices { margin-top: 2px !important; font-family: var(--num); font-size: 14.5px; font-variant-numeric: tabular-nums; }
-.drink-info { margin-top: 2px !important; font-size: 12.5px; color: var(--ink-2); }
-.amt.unlisted { font-family: var(--font); font-size: 13px; }
-.receipt-sizes { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 0.35em !important; font-size: 14px; color: var(--ink-2); }
-.receipt-sizes b { font-family: var(--num); color: var(--ink); font-weight: 700; }
-.receipt-total.solo { margin-top: 0.4em !important; }
-.tip {
-  padding: 8px 10px; border-radius: 10px;
-  background: color-mix(in srgb, var(--marker-solid) 14%, var(--paper));
-  font-size: 14.5px; line-height: 1.6;
-}
-
-.guess { margin-top: 8px !important; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
-.guess p { margin: 0; }
-.guess {
-  padding: 10px 12px; border-radius: 12px;
-  background: color-mix(in srgb, var(--ink-2) 10%, var(--paper));
-}
-.guess-q { margin-top: 6px !important; font-weight: 700; color: var(--ink); }
-.guess-alts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tip { font-size: 14px; line-height: 1.6; }
 .alt-btn, .choose-btn {
   border: 1px solid var(--line); background: var(--paper); color: var(--ink);
   border-radius: 999px; padding: 6px 12px; font-size: 14px; text-align: left;
 }
 .choose-q { font-size: 16.5px; font-weight: 700; }
-.choose-list { list-style: none; padding: 0 !important; margin: 8px 0 0; display: grid; gap: 8px; }
+.choose-list { list-style: none; padding: 0 !important; margin: 8px 0 0; display: grid; gap: 6px; }
 .choose-list li { margin: 0; }
-.choose-list { gap: 6px; }
 .choose-btn { width: 100%; border-radius: 12px; padding: 8px 12px; display: grid; gap: 2px; }
 .choose-btn .drink-row { gap: 4px 8px; }
 .choose-btn .drink-name { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
 .choose-btn .milk-tag { font-size: 12px; padding: 4px 8px; }
 .choose-btn .drink-prices { font-size: 13px; color: var(--ink-2); margin: 0 !important; }
 .choose-btn .ref-comp { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
-.ice-sel { display: flex; align-items: center; gap: 6px; margin-top: 10px !important; }
-.ice-label { font-size: 13.5px; color: var(--ink-2); margin-right: 2px; white-space: nowrap; }
-.ice-btn {
-  flex: 1; min-height: 40px; padding: 6px 8px;
-  border: 1px solid var(--line); border-radius: 999px;
-  background: var(--paper); font-size: 15px;
-}
-.ice-btn[aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); font-weight: 700; }
+
+/* 少冰／去冰：要不要補 */
 .ask {
   padding: 10px 12px; border-radius: 12px;
-  border: 1.5px solid var(--marker-solid);
-  background: color-mix(in srgb, var(--marker-solid) 10%, var(--paper));
+  background: var(--tint);
 }
-.ask-q { font-size: 16.5px; font-weight: 700; }
-.ask-sub { margin-top: 2px !important; font-size: 14px; color: var(--ink-2); line-height: 1.6; }
-.ask-actions { display: flex; gap: 8px; margin-top: 10px !important; }
+.ask-q { font-size: 16px; font-weight: 700; }
+.ask-actions { display: flex; gap: 8px; margin-top: 8px !important; }
 .ask-btn {
-  flex: 1; min-height: 44px; padding: 8px 10px;
-  border: 1.5px solid var(--marker-solid); border-radius: 10px;
+  flex: 1; min-height: 42px; padding: 6px 10px;
+  border: 1.5px solid var(--accent); border-radius: 10px;
   background: var(--paper); color: var(--ink);
   font-size: 15.5px; font-weight: 700;
 }
-.ask-btn[data-choice="yes"][aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #FFFDF9; }
-.ask-btn[data-choice="no"][aria-pressed="true"] { background: var(--user-bg); border-color: var(--user-bg); color: var(--user-ink); }
+.ask-btn[aria-pressed="true"] { background: var(--accent); color: #FFFFFF; }
 .ask-btn:active { transform: translateY(1px); }
 
-/* 買一送一券（BAF） */
-.baf-entry { margin-top: 10px !important; }
-.baf-toggle {
-  width: 100%; min-height: 42px; padding: 8px 12px;
-  border: 1.5px dashed var(--marker-solid); border-radius: 12px;
-  background: var(--paper); color: var(--ink); font-size: 15px; font-weight: 700;
+.link-btn {
+  border: 0; background: none; padding: 4px 2px; margin-left: 4px; font-size: 13.5px;
+  color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px;
 }
-.baf {
-  margin-top: 10px !important; padding: 10px 12px; border-radius: 12px;
-  border: 1.5px solid var(--marker-solid);
-  background: color-mix(in srgb, var(--marker-solid) 8%, var(--paper));
-}
-.baf > * + * { margin-top: 0.5em; }
-.baf-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.baf-title { font-size: 16px; font-weight: 700; }
-.baf-off, .link-btn {
-  border: 0; background: none; padding: 4px 2px; font-size: 13.5px;
-  color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px;
-}
-.baf-cup { padding: 6px 0; border-bottom: 1px dashed var(--line); }
-.baf-cup-name { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 15px; line-height: 1.45; }
-.baf-role {
-  flex: none; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
-  background: var(--user-bg); color: var(--user-ink);
-}
-.baf-role.free { background: var(--accent); color: #FFFDF9; }
-.baf-calc { font-size: 14px; color: var(--ink-2); font-family: var(--num); }
-.baf-calc mark.price { color: var(--ink); font-weight: 700; }
-.baf-pick { font-size: 14px; color: var(--ink-2); }
-.baf-sizes { display: flex; gap: 6px; }
-.baf-size {
-  flex: 1; display: grid; gap: 1px; justify-items: center; padding: 8px 6px;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--paper); font-size: 13.5px;
-}
-.baf-size b { font-family: var(--num); font-size: 18px; }
-.baf-second { font-size: 14px; }
 .baf-form { display: flex; gap: 6px; }
 .baf-input {
   flex: 1; min-width: 0; padding: 8px 12px; font-size: 16px;
@@ -301,10 +308,8 @@ mark.price {
 }
 .baf-go {
   flex: none; padding: 8px 16px; border: 0; border-radius: 10px;
-  background: var(--accent); color: #FFFDF9; font-weight: 700; font-size: 15px;
+  background: var(--accent); color: #FFFFFF; font-weight: 700; font-size: 15px;
 }
-.baf-rules summary { font-size: 13.5px; color: var(--ink-2); cursor: pointer; }
-.baf-rules ul { margin: 0.4em 0 0; padding-left: 1.15em; font-size: 13px; color: var(--ink-2); line-height: 1.6; }
 
 /* 標示圖片 */
 figure.shot { margin: 0.75em 0 0; }
@@ -316,7 +321,7 @@ figure.shot { margin: 0.75em 0 0; }
 .shot-btn img { display: block; width: 100%; height: auto; }
 .shot-loading {
   display: grid; place-items: center; min-height: 170px; padding: 12px;
-  font-size: 13px; color: #6B625C;
+  font-size: 13px; color: #63666A;
 }
 figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 
@@ -357,7 +362,7 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
 .chip-mark {
   border-color: var(--marker-solid);
   background:
-    linear-gradient(100deg, transparent 10%, var(--marker) 12%, var(--marker) 90%, transparent 92%)
+    linear-gradient(100deg, transparent 10%, var(--chart-marker) 12%, var(--chart-marker) 90%, transparent 92%)
     50% 74% / 100% 46% no-repeat,
     var(--paper);
 }
@@ -376,9 +381,9 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
   flex: none; width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 0; border-radius: 50%;
-  background: var(--accent); color: #FFFDF9;
+  background: var(--accent); color: #FFFFFF;
 }
-#send svg { width: 22px; height: 22px; margin-left: -2px; }
+#send svg { width: 22px; height: 22px; margin-left: -2px; color: #FFFFFF; }
 #send:disabled { opacity: 0.5; cursor: default; }
 .fine { margin: 0 16px 8px; font-size: 11.5px; line-height: 1.5; color: var(--ink-2); text-align: center; }
 
@@ -386,7 +391,7 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
 #viewer {
   width: 100vw; height: 100dvh; max-width: 100vw; max-height: 100dvh;
   margin: 0; padding: 0; border: 0;
-  background: #16120F; color: #fff;
+  background: #0F1B17; color: #fff;
 }
 #viewer::backdrop { background: rgba(0, 0, 0, 0.6); }
 #viewer[open] { display: flex; flex-direction: column; }
@@ -399,7 +404,7 @@ figure.shot figcaption { margin-top: 6px; font-size: 12.5px; line-height: 1.5; c
   border: 1px solid rgba(255, 255, 255, 0.35); background: transparent; color: #fff;
   border-radius: 999px; padding: 6px 13px; font-size: 14px; text-decoration: none;
 }
-.viewer-tabs button[aria-pressed="true"] { background: #fff; color: #2A201B; border-color: #fff; }
+.viewer-tabs button[aria-pressed="true"] { background: #fff; color: var(--house); border-color: #fff; }
 .viewer-act:first-of-type { margin-left: auto; }
 .viewer-body {
   flex: 1; overflow: auto; padding: 0 10px;

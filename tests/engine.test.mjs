@@ -1,6 +1,6 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
-import { localReply, computeQuote, normalize, parseAiReply, buildOrder, bafQuote, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
+import { localReply, computeQuote, normalize, parseAiReply, buildOrder, bafQuote, singleQuote, ecoCountFrom, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
 import { DRINKS, dietSafe } from '../public/drinks.js';
 import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
 import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
@@ -212,6 +212,19 @@ t('打完整品名不出現候選', () => {
   assert.equal(order('經典巧克力').match.fuzzy, false);
   assert.equal(order('冰那堤').match.fuzzy, false);
 });
+t('「冰美式」「熱美式」：常用簡稱加冷熱 → 不列候選', () => {
+  assert.equal(order('冰美式特大杯去冰補美式').match.fuzzy, false);
+  assert.equal(order('熱美式大杯').match.fuzzy, false);
+});
+t('「補美式」是補飲料，不會被當成第二杯', () => {
+  const o = order('冰美式去冰補美式');
+  assert.equal(o.kind, 'drink');
+  assert.ok(o.lines.some(l => l.id === 'ice_drink' && l.amount === 15));
+});
+t('BAF、環保杯的說法不會變成「看不懂」', () => {
+  const o = order('兩杯冰美式特大杯去冰補美式都用環保杯 用BAF券');
+  assert.ok(!o.notes.some(n => /沒看懂/.test(n)), o.notes.join('/'));
+});
 t('收費問題不會被當成搜尋', () => {
   assert.equal(order('可可碎片要加錢嗎'), null);
   assert.equal(order('咖啡要加錢嗎'), null);
@@ -403,14 +416,29 @@ t('兩杯冰那堤大杯換燕麥奶：付費 $160＋送 $20＝$180（燕麥奶�
   assert.deepEqual(r.cups.map(c => c.pay), [160, 20]);
   assert.equal(r.total, 180);
 });
-t('都帶環保杯、送的那杯沒加價：付費杯折 $10，送的不折', () => {
-  const r = baf('冰那堤大杯', '冰那堤大杯', { eco1: true, eco2: true }).rows[0];
+t('2 個環保杯、送的那杯沒加價：付費杯折 $10，送的 $0 不再折', () => {
+  const r = baf('冰那堤大杯', '冰那堤大杯', { eco: 2 }).rows[0];
   assert.deepEqual(r.cups.map(c => c.pay), [130, 0]);
 });
-t('都帶環保杯、送的那杯有加價：兩杯都折 $10（店長說明）', () => {
-  const r = baf('冰那堤大杯去冰補奶', '冰那堤大杯去冰補奶', { eco1: true, eco2: true }).rows[0];
+t('2 個環保杯、送的那杯有加價：兩杯都折 $10', () => {
+  const r = baf('冰那堤大杯去冰補奶', '冰那堤大杯去冰補奶', { eco: 2 }).rows[0];
   assert.deepEqual(r.cups.map(c => c.pay), [145, 5]);
   assert.equal(r.total, 150);
+});
+t('1 個環保杯：折在付費那杯', () => {
+  const r = baf('冰那堤大杯去冰補奶', '冰那堤大杯去冰補奶', { eco: 1 }).rows[0];
+  assert.deepEqual(r.cups.map(c => c.pay), [145, 15]);
+});
+t('單杯：環保杯 1 個折 $10、0 個不折', () => {
+  assert.equal(singleQuote(order('冰那堤大杯換燕麥奶'), { eco: 1 }).find(x => x.label === '大杯').total, 150);
+  assert.equal(singleQuote(order('冰那堤大杯換燕麥奶'), { eco: 0 }).find(x => x.label === '大杯').total, 160);
+});
+t('從文字讀環保杯數量', () => {
+  assert.equal(ecoCountFrom('冰那堤 環保杯'), 1);
+  assert.equal(ecoCountFrom('兩杯都用環保杯'), 2);
+  assert.equal(ecoCountFrom('2個環保杯'), 2);
+  assert.equal(ecoCountFrom('沒帶環保杯'), 0);
+  assert.equal(ecoCountFrom('冰那堤'), 0);
 });
 t('兩杯冷熱不一致、大小不一致 → 不能用', () => {
   assert.match(baf('冰那堤', '熱那堤').error, /冷熱一致/);
@@ -427,7 +455,7 @@ t('「用BAF券」沿用上一杯並打開買一送一試算', () => {
   assert.ok(r.order.baf && r.order.drink.n === '冰那堤');
   assert.ok(reply('冰那堤大杯 買一送一').order.baf);
 });
-t('買一送一問答：寫出店長說明的環保杯規則', () => assert.match(reply('買一送一券怎麼算').text, /送的那杯有加價才折/));
+t('買一送一問答：寫出環保杯鐵律（每一杯用環保杯就折 $10）', () => assert.match(reply('買一送一券怎麼算').text, /每一杯用環保杯就折 \$10/));
 
 console.log('語意分流');
 const TH = { soft: 0.7, margin: 0.05 };

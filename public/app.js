@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610131544';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote } from './engine.js?v=202610131544';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610131544';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610132345';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610132345';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610132345';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -55,36 +55,33 @@ function inline(s) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/([+＋−-]?\$\d+(?:\s*[／/]\s*份)?)/g, '<mark class="price">$1</mark>');
 }
-function renderText(text) {
-  const out = [];
-  let list = null;
+function renderText(text, { fold = true } = {}) {
+  // 一行一個單位：段落或條列項目
+  const units = [];
   for (const raw of text.split('\n')) {
     const line = raw.trim();
-    const m = line.match(/^[-•・*]\s+(.*)$/);
-    // 「- 這邊有幾款…推薦您：」這種引導句不當成項目
-    if (m && !list && /[：:]\s*$/.test(m[1])) { out.push(m[1]); continue; }
-    if (m) {
-      if (!list) { list = []; out.push(list); }
-      list.push(m[1]);
-      continue;
-    }
-    list = null;
     if (!line) continue;
-    out.push(line);
+    const m = line.match(/^[-•・*]\s+(.*)$/);
+    if (m && !units.length && /[：:]\s*$/.test(m[1])) { units.push({ p: m[1] }); continue; } // 「- 這邊有幾款…：」引導句不當項目
+    units.push(m ? { li: m[1] } : { p: line });
   }
-  return out.map(part => Array.isArray(part)
-    ? `<ul>${part.map(li => `<li>${inline(li)}</li>`).join('')}</ul>`
-    : `<p${/^⚠️/.test(part) ? ' class="note"' : ''}>${inline(part)}</p>`).join('');
+  const html = list => {
+    let out = '', ul = null;
+    for (const u of list) {
+      if (u.li != null) { ul = ul || []; ul.push(u.li); continue; }
+      if (ul) { out += `<ul>${ul.map(x => `<li>${inline(x)}</li>`).join('')}</ul>`; ul = null; }
+      out += `<p${/^⚠️/.test(u.p) ? ' class="note"' : ''}>${inline(u.p)}</p>`;
+    }
+    if (ul) out += `<ul>${ul.map(x => `<li>${inline(x)}</li>`).join('')}</ul>`;
+    return out;
+  };
+  // 忙碌時只掃重點：超過 5 行，先顯示前 3 行，其餘收在「看完整說明」
+  if (!fold || units.length <= 5) return html(units);
+  return `${html(units.slice(0, 3))}<details class="more"><summary>看完整說明</summary>${html(units.slice(3))}</details>`;
 }
 function milkTag(s) {
   const cls = s.hasMilk ? 'milk-yes' : (/有奶油|冰淇淋/.test(s.milk) ? 'milk-part' : 'milk-no');
   return `<span class="milk-tag ${cls}">${esc(s.milk)}</span>`;
-}
-function amountCell(a, status) {
-  if (status) return `<span class="amt unlisted">${esc(status)}</span>`;
-  if (a == null) return '<span class="amt unlisted">未列價</span>';
-  if (a === 0) return '<span class="amt">不加價</span>';
-  return `<span class="amt"><mark class="price">${money(a)}</mark></span>`;
 }
 function renderOrder(o, opts = {}) {
   if (o.kind === 'choose') {
@@ -106,66 +103,113 @@ function renderOrder(o, opts = {}) {
       </li>`).join('')}</ul>
       <p class="note">加價試算請一杯一杯問，例如「${esc(o.drinks[0].name.replace(/（.*$/, ''))}去冰補滿大杯」。</p>`;
   }
+  return renderDrinkCard(o, defaultCardState(o, ''), null);
+}
+
+// ---------- 飲品卡片：單杯／買一送一，一張卡片看完 ----------
+// 忙碌時 0.4～1.3 秒掃讀：畫面上只留「杯型合計、冰量、加價、環保杯、合計」，其餘收進「詳細」
+const IMPORTANT = /沒看懂|不提供|沒有(短杯|中杯|大杯|特大杯)|(?<!能)不能補|不適用/;
+const SHORT_SIZE = { 短杯: '短', 中杯: '中', 大杯: '大', 特大杯: '特大' };
+
+function defaultCardState(o, text) {
+  const baf = !!o.baf;
+  return {
+    ice: o.iceSelectable ? '正常冰' : null, choice: null,
+    size: o.sizeLabel || null,
+    eco: Math.min(ecoCountFrom(text), baf ? 2 : 1),
+    mode: baf ? 'baf' : 'one', second: null, editing: false,
+  };
+}
+
+function cardView(o, st, o2) {
+  const sizes = sizesOf(o.drink);
+  let size = st.size || o.sizeLabel || (sizes.length === 1 ? sizes[0].label : null);
+  let rows = [], baf = null, error = '';
+  if (st.mode === 'baf') {
+    if (o2 && o2.kind !== 'drink') {
+      error = o2?.kind === 'choose'
+        ? `名稱有「${o2.said}」的有好幾杯，請打完整品名，例如：${o2.options.slice(0, 3).map(x => x.name).join('、')}。`
+        : '看不懂第 2 杯，請打菜單上的品名。';
+    } else {
+      const free = x => ({ ...x, sizeIdx: null, sizeLabel: null });
+      const q = bafQuote(free(o), free(o2 || o), { eco: st.eco });
+      if (!q.ok) error = q.error;
+      else { baf = q; rows = q.rows.map(r => ({ label: r.label, total: r.total })); }
+      if (!error && o2?.sizeLabel && size && o2.sizeLabel !== size) error = '買一送一的兩杯大小要一致。';
+    }
+  } else {
+    rows = singleQuote(o, { eco: st.eco }).map(r => ({ label: r.label, total: r.total }));
+  }
+  if (size && !rows.some(r => r.label === size)) size = null;
+  return { size, rows, sel: rows.find(r => r.label === size) || null, baf, bafRow: baf && size ? baf.rows.find(r => r.label === size) : null, error };
+}
+
+function renderDrinkCard(o, st, o2, ask = null) {
   const s = o.summary;
-  let html = `
-    ${o.aiSaid ? `<p class="ai-said">AI 判讀為：${esc(o.aiSaid)}</p>` : ''}
-    <div class="drink-card">
-      <div class="drink-row"><p class="drink-name">${esc(s.name)}</p>${milkTag(s)}</div>
-      <p class="drink-comp">${esc(s.comp)}</p>
-      <p class="drink-prices">${esc(s.prices)}</p>
-      ${s.altNote ? `<p class="drink-info">${esc(s.altNote)}</p>` : ''}
-      ${s.info ? `<p class="drink-info">${esc(s.info)}</p>` : ''}
-      ${o.match?.fuzzy ? `
-        <div class="guess">
-          <p>依「${esc(o.match.said)}」判斷是這杯。</p>
-          ${o.match.alts.length ? `
-            <p class="guess-q">不是這杯？點下面換一杯：</p>
-            <div class="guess-alts">${o.match.alts.map(a => `<button type="button" class="alt-btn" data-send="${esc(a.text)}">${esc(a.name)}</button>`).join('')}</div>` : ''}
+  const v = cardView(o, st, o2);
+  const seg = (label, items) => `<div class="dc-row"><span class="dc-k">${label}</span><div class="seg" role="group" aria-label="${label}">${items}</div></div>`;
+  const pills = o.lines.filter(l => l.id !== 'eco').map(l => {
+    const off = !!l.blocked || /不提供|不能補|不適用/.test(l.status || '');
+    const val = l.status || (l.amount == null ? '未列價' : l.amount === 0 ? '$0' : money(l.amount));
+    return `<span class="pill${off ? ' off' : l.amount ? '' : ' zero'}">${esc(l.label.replace(/（.*）$/, ''))} <b>${esc(val)}</b></span>`;
+  }).join('');
+  const notes = [...o.notes, ...o.tips];
+  const important = [v.error, ...notes.filter(n => IMPORTANT.test(n))].filter(Boolean).slice(0, 2);
+  const rest = notes.filter(n => !important.includes(n));
+  const cups = st.mode === 'baf' && !v.error ? (v.bafRow?.cups || v.baf?.rows[0]?.cups || []) : [];
+  const maxEco = st.mode === 'baf' ? 2 : 1;
+  const alts = o.match?.fuzzy && o.match.alts.length
+    ? `<div class="dc-alts"><span class="dc-k">不是這杯？</span>${o.match.alts.slice(0, 3).map(a => `<button type="button" class="alt-btn" data-send="${esc(a.text)}">${esc(a.name)}</button>`).join('')}</div>` : '';
+  return `
+    ${o.aiSaid ? `<p class="ai-said">AI 判讀：${esc(o.aiSaid)}</p>` : ''}
+    <div class="dc">
+      <div class="dc-head"><p class="dc-name">${esc(s.name)}</p>${milkTag(s)}</div>
+      ${alts}
+      <div class="seg dc-mode" role="group" aria-label="計算方式">
+        <button type="button" data-mode="one" aria-pressed="${st.mode === 'one'}">單杯</button>
+        <button type="button" data-mode="baf" aria-pressed="${st.mode === 'baf'}">買一送一 BAF</button>
+      </div>
+      ${v.rows.length ? seg('杯型', v.rows.map(r => `<button type="button" class="size-btn" data-size="${esc(r.label)}" aria-pressed="${r.label === v.size}"><span>${esc(SHORT_SIZE[r.label] || r.label)}</span><b>$${r.total}</b></button>`).join('')) : ''}
+      ${st.ice ? seg('冰量', ['正常冰', '少冰', '去冰'].map(x => `<button type="button" data-ice="${x}" aria-pressed="${st.ice === x}">${x.replace('正常冰', '正常')}</button>`).join('')) : ''}
+      ${ask ? `
+        <div class="ask">
+          <p class="ask-q">${esc(ask.q)}</p>
+          <div class="ask-actions" role="group" aria-label="${esc(ask.q)}">
+            <button type="button" class="ask-btn" data-choice="yes" aria-pressed="${st.choice === 'yes'}">要補 +$15</button>
+            <button type="button" class="ask-btn" data-choice="no" aria-pressed="${st.choice === 'no'}">不補</button>
+          </div>
         </div>` : ''}
+      ${st.mode === 'baf' ? `
+        <ul class="cups">${cups.map(c => `
+          <li><span class="role ${c.role === '送' ? 'free' : 'paid'}">${c.role}</span><span class="cup-name">${esc(c.name)}</span>${v.bafRow ? `<b>$${c.pay}</b>` : ''}</li>`).join('')}
+        </ul>
+        <p class="cup2">第 2 杯${st.second ? `：${esc(o2?.kind === 'drink' ? o2.summary.name : st.second)}` : '一樣'}
+          <button type="button" class="link-btn baf-change">換一杯</button>${st.second ? '<button type="button" class="link-btn baf-same">改回一樣</button>' : ''}</p>
+        ${st.editing ? `
+          <form class="baf-form">
+            <input type="text" class="baf-input" maxlength="60" placeholder="第 2 杯，例如：冰美式" aria-label="第 2 杯飲品" value="${esc(st.second || '')}">
+            <button type="submit" class="baf-go">算</button>
+          </form>` : ''}`
+      : (pills ? `<div class="pills">${pills}</div>` : '')}
+      ${important.map(n => `<p class="warn">${esc(n)}</p>`).join('')}
+      <div class="dc-foot">
+        ${seg('環保杯', Array.from({ length: maxEco + 1 }, (_, n) => `<button type="button" data-eco="${n}" aria-pressed="${st.eco === n}">${n}</button>`).join(''))}
+        <p class="dc-total">${v.sel ? `<span>${st.mode === 'baf' ? '兩杯' : '合計'}</span><mark class="price">$${v.sel.total}</mark>` : '<span class="dc-hint">點杯型看合計</span>'}</p>
+      </div>
+      <details class="more dc-more">
+        <summary>詳細</summary>
+        <p>${esc(s.comp)}</p>
+        <p>菜單價格：${esc(s.prices)}</p>
+        ${s.altNote ? `<p>${esc(s.altNote)}</p>` : ''}
+        ${s.info ? `<p>${esc(s.info)}</p>` : ''}
+        ${rest.map(n => `<p>${inline(n)}</p>`).join('')}
+        ${v.bafRow && v.bafRow.saved > 0 ? `<p>用券省 $${v.bafRow.saved}。</p>` : ''}
+        ${st.mode === 'baf' && v.baf ? v.baf.notes.map(n => `<p>${esc(n)}</p>`).join('') : ''}
+        ${st.mode === 'baf' ? `<ul>${[...BAF_RULES.how, ...BAF_RULES.limits].map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        ${o.aiNote ? `<p>AI 補充：${esc(o.aiNote)}</p>` : ''}
+        <p>實際金額以門市結帳為準。</p>
+      </details>
     </div>`;
-  if (opts.iceSel) {
-    html += `
-      <div class="ice-sel" role="group" aria-label="冰量">
-        <span class="ice-label">冰量</span>
-        ${['正常冰', '少冰', '去冰'].map(v => `<button type="button" class="ice-btn" data-ice="${v}" aria-pressed="${opts.iceSel === v}">${v}</button>`).join('')}
-      </div>`;
-  }
-  if (o.lines.length) {
-    const rows = o.lines.map(l => `<li><span>${esc(l.label)}</span>${amountCell(l.amount, l.status)}</li>`).join('');
-    const total = o.basePrice != null
-      ? `<p class="receipt-total"><span>合計（${esc(o.sizeLabel)}）</span><mark class="price">$${o.basePrice + o.addTotal}</mark></p>
-         <p class="receipt-foot">飲品 $${o.basePrice}，加價 ${money(o.addTotal)}</p>`
-      : `<p class="receipt-total"><span>加價</span><mark class="price">${money(o.addTotal)}</mark></p>
-         <p class="receipt-sizes">${o.sizeTotals.map(t => `<span>${esc(t.label)} <b>$${t.total}</b></span>`).join('')}</p>
-         <p class="receipt-foot">上面是含飲品的總價，實際以門市結帳為準。</p>`;
-    html += `
-      <div class="receipt">
-        <p class="receipt-title">加價明細</p>
-        <ul class="receipt-lines">${rows}</ul>
-        ${total}
-      </div>`;
-  } else if (o.basePrice != null) {
-    html += `<p class="receipt-total solo"><span>${esc(o.sizeLabel)}</span><mark class="price">$${o.basePrice}</mark></p>`;
-  }
-  html += o.tips.map(t => `<p class="tip">${inline(t)}</p>`).join('');
-  const ask = opts.ask || o.ask;
-  if (ask) {
-    const choice = opts.choice || null;
-    const sub = choice === 'yes' ? `已加上${ask.add} +$15，上面的價格已更新。`
-      : choice === 'no' ? '不補，維持原本菜單價格。' : ask.sub;
-    html += `
-      <div class="ask">
-        <p class="ask-q">${esc(ask.q)}</p>
-        <p class="ask-sub">${inline(sub)}</p>
-        <div class="ask-actions" role="group" aria-label="${esc(ask.q)}">
-          <button type="button" class="ask-btn" data-choice="yes" aria-pressed="${choice === 'yes'}">要補（+$15）</button>
-          <button type="button" class="ask-btn" data-choice="no" aria-pressed="${choice === 'no'}">不補</button>
-        </div>
-      </div>`;
-  }
-  html += o.notes.filter(n => !(o.aiNote && /沒看懂/.test(n))).map(n => `<p class="note">⚠️ ${esc(n)}</p>`).join('');
-  if (o.aiNote) html += `<p class="note">AI 補充：${esc(o.aiNote)}</p>`;
-  return html;
 }
 
 function renderRefs(list, title = '提到的飲品') {
@@ -181,64 +225,21 @@ function renderRefs(list, title = '提到的飲品') {
     </div>`;
 }
 
-// ---------- 買一送一券（BAF）----------
-function renderBaf(q, baf, o2) {
-  const cupHtml = c => `
-    <div class="baf-cup">
-      <p class="baf-cup-name"><span class="baf-role ${c.role === '送' ? 'free' : 'paid'}">${c.role === '送' ? '送' : '付費'}</span>${esc(c.name)}</p>
-      <p class="baf-calc">飲品 ${c.role === '送' ? `$0（原價 $${c.listBase}）` : `$${c.base}`}${c.add ? ` ＋ 客製化 $${c.add}` : ''}${c.ecoOff ? ` − 環保杯 $${c.ecoOff}` : ''} ＝ <mark class="price">$${c.pay}</mark></p>
-    </div>`;
-  let body;
-  if (!q.ok) {
-    body = `<p class="note baf-err">⚠️ ${esc(q.error)}</p>`;
-  } else if (q.sizeKnown) {
-    const r = q.rows[0];
-    body = `${r.cups.map(cupHtml).join('')}
-      <p class="receipt-total"><span>兩杯合計（${esc(r.label)}）</span><mark class="price">$${r.total}</mark></p>
-      <p class="receipt-foot">省 $${r.saved}。實際以門市結帳為準。</p>`;
-  } else {
-    body = `<p class="baf-pick">兩杯要同杯型，點一個杯型看明細：</p>
-      <div class="baf-sizes">${q.rows.map(r => `
-        <button type="button" class="baf-size" data-size="${esc(r.label)}"><span>${esc(r.label)}</span><b>$${r.total}</b></button>`).join('')}</div>`;
-  }
-  const notes = q.ok ? q.notes.map(n => `<p class="note">${esc(n)}</p>`).join('') : '';
-  return `
-    <div class="baf" aria-label="買一送一券試算">
-      <div class="baf-head">
-        <p class="baf-title">用 BAF 券（買一送一）</p>
-        <button type="button" class="baf-off">取消</button>
-      </div>
-      ${body}
-      ${notes}
-      <p class="baf-second">第 2 杯：<b>${baf.second ? esc(o2?.kind === 'drink' ? o2.summary.name : baf.second) : '和第 1 杯一樣'}</b>
-        <button type="button" class="link-btn baf-change">換一杯</button>${baf.second ? '<button type="button" class="link-btn baf-same">改回一樣</button>' : ''}</p>
-      ${baf.editing ? `
-        <form class="baf-form">
-          <input type="text" class="baf-input" maxlength="60" placeholder="第 2 杯，例如：冰美式 去冰" aria-label="第 2 杯飲品" value="${esc(baf.second || '')}">
-          <button type="submit" class="baf-go">算</button>
-        </form>` : ''}
-      <details class="baf-rules">
-        <summary>買一送一券規則</summary>
-        <ul>${[...BAF_RULES.how, ...BAF_RULES.limits].map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-      </details>
-    </div>`;
-}
-
 function renderQuote(q) {
-  const rows = q.lines.map(l => `
-    <li><span>${esc(l.label)}</span><span class="amt">${l.amount === 0 ? '不加價' : `<mark class="price">${money(l.amount)}</mark>`}</span></li>`).join('');
-  const notes = q.notes.map(n => `<p class="note">${esc(n)}</p>`).join('');
+  const pills = q.lines.map(l => `<span class="pill${l.amount ? '' : ' zero'}">${esc(l.label)} <b>${l.amount === 0 ? '$0' : money(l.amount)}</b></span>`).join('');
   return `
-    <div class="receipt">
-      <p class="receipt-title">加價試算</p>
-      <ul class="receipt-lines">${rows}</ul>
-      <p class="receipt-total"><span>合計</span><mark class="price">${money(q.total)}</mark></p>
-      <p class="receipt-foot">不含飲品本身價格，實際以門市結帳為準。</p>
-    </div>${notes}`;
+    <div class="dc">
+      <div class="pills">${pills}</div>
+      <div class="dc-foot">
+        <span class="dc-k">不含飲品本身</span>
+        <p class="dc-total"><span>加價</span><mark class="price">${money(q.total)}</mark></p>
+      </div>
+      ${q.notes.length ? `<details class="more dc-more"><summary>詳細</summary>${q.notes.map(n => `<p>${esc(n)}</p>`).join('')}<p>實際金額以門市結帳為準。</p></details>` : ''}
+    </div>`;
 }
 
 // ---------- 訊息 ----------
-const AVATAR = `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 12h18l-2.2 19.5a2.5 2.5 0 0 1-2.5 2.2h-8.6a2.5 2.5 0 0 1-2.5-2.2Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M9.5 12h21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M13 19.5l14.5-2.2" stroke="var(--marker-solid)" stroke-width="5" stroke-linecap="round" opacity=".85"/></svg>`;
+const AVATAR = `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M11 12h18l-2.2 19.5a2.5 2.5 0 0 1-2.5 2.2h-8.6a2.5 2.5 0 0 1-2.5-2.2Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M9.5 12h21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M13 19.5l14.5-2.2" stroke="var(--logo-swipe)" stroke-width="5" stroke-linecap="round"/></svg>`;
 
 function addMessage(role, html, meta = '') {
   const row = document.createElement('div');
@@ -353,94 +354,76 @@ function botReply(r, userText) {
 // 卡片上的按鈕：冰量（正常冰／少冰／去冰）＋橘框「要補／不補」，在同一張卡片即時切換價格
 function setupCard(row, firstOrder, baseText) {
   const bubble = row.querySelector('.bubble');
-  const showIce = !!firstOrder.iceSelectable;
-  let ice = showIce ? '正常冰' : null;
-  let choice = null;
-  // 買一送一券：點單有提到買一送一／BAF 就直接打開
-  // 環保杯不在這裡設定（店長：太亂）；規則寫在「買一送一券規則」裡
-  const baf = { on: !!firstOrder.baf, second: null, size: null, editing: false };
+  const st = defaultCardState(firstOrder, baseText);
 
+  // 目前這杯：冰量、補不補都算進點單文字
   const current = () => {
-    const text = baseText + (ice && ice !== '正常冰' ? ice : '');
+    const text = baseText + (st.ice && st.ice !== '正常冰' ? st.ice : '');
     const base = buildOrder(text);
     const ask = base?.ask || null;
-    const o = choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
+    const o = st.choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
     if (o && firstOrder.aiSaid) o.aiSaid = firstOrder.aiSaid;
     if (o && firstOrder.aiNote) o.aiNote = firstOrder.aiNote;
-    return { text: choice === 'yes' && ask ? text + ask.add : text, o, ask };
+    return { text: st.choice === 'yes' && ask ? text + ask.add : text, o, ask };
   };
-
-  const bafCalc = (text, o) => {
-    const withSize = (t, size) => (size && !/(短杯|中杯|大杯|特大杯|solo|doppio)/i.test(t) ? `${t}${size}` : t);
-    const o1 = baf.size && !o.sizeLabel ? buildOrder(withSize(text, baf.size)) : o;
-    const size = o1.sizeLabel || baf.size;
-    const o2 = baf.second ? buildOrder(withSize(normalize(baf.second), size)) : o1;
-    if (baf.second && o2?.kind !== 'drink') {
-      const hint = o2?.kind === 'choose' ? `名稱有「${o2.said}」的有好幾杯，請打完整品名，例如：${o2.options.slice(0, 3).map(x => x.name).join('、')}。` : '看不懂第 2 杯，請打菜單上的品名。';
-      return { q: { ok: false, error: hint }, o2 };
-    }
-    return { q: bafQuote(o1, o2), o2 };
-  };
+  const second = () => (st.second ? buildOrder(normalize(st.second)) : null);
 
   const draw = () => {
-    const { text, o, ask } = current();
+    const { o, ask } = current();
     if (!o || o.kind !== 'drink') return;
-    let bafHtml = '<div class="baf-entry"><button type="button" class="baf-toggle">用BAF券（買一送一）</button></div>';
-    if (baf.on) {
-      const { q, o2 } = bafCalc(text, o);
-      bafHtml = renderBaf(q, baf, o2);
-    }
-    bubble.innerHTML = renderOrder(o, { ask, choice: ask ? choice : null, iceSel: showIce ? ice : null }) + bafHtml + (firstOrder.health ? healthNote(firstOrder.health) : '');
-    const on = (sel, fn) => bubble.querySelectorAll(sel).forEach(b => b.addEventListener('click', fn));
-    on('.baf-toggle', () => { baf.on = true; draw(); note('用BAF券'); });
-    on('.baf-off', () => { baf.on = false; baf.editing = false; draw(); });
-    on('.baf-size', e => { baf.size = e.currentTarget.dataset.size; draw(); note(`BAF ${baf.size}`); });
-    on('.baf-change', () => { baf.editing = true; draw(); bubble.querySelector('.baf-input')?.focus(); });
-    on('.baf-same', () => { baf.second = null; baf.editing = false; draw(); });
-    bubble.querySelector('.baf-form')?.addEventListener('submit', e => {
-      e.preventDefault();
-      const v = bubble.querySelector('.baf-input').value.trim();
-      baf.second = v || null;
-      baf.editing = false;
-      draw();
-      if (v) note(`BAF 第 2 杯：${v}`);
-    });
-    bubble.querySelectorAll('.ice-sel .ice-btn').forEach(b => b.addEventListener('click', () => {
-      if (ice === b.dataset.ice) return;
-      ice = b.dataset.ice;
-      choice = null;
-      commit(`${ice}`);
-    }));
-    bubble.querySelectorAll('.ask-btn').forEach(b => b.addEventListener('click', () => {
-      choice = b.dataset.choice;
-      commit(choice === 'yes' ? `要${current().ask?.add || '補'}` : '不補');
-    }));
+    bubble.innerHTML = renderDrinkCard(o, st, second(), ask) + (firstOrder.health ? healthNote(firstOrder.health) : '');
   };
 
-  // 讓 AI 後續對話知道卡片上做了什麼
-  const note = said => {
-    const { text, o } = current();
-    const { q } = bafCalc(text, o);
-    const r = q.ok ? (q.sizeKnown ? q.rows[0] : null) : null;
-    state.history.push({ role: 'user', content: said }, {
-      role: 'assistant',
-      content: q.ok ? (r ? `買一送一試算（${r.label}）：${r.cups.map(c => `${c.role}「${c.name}」$${c.pay}`).join('，')}，合計 $${r.total}` : `買一送一試算：${q.rows.map(x => `${x.label} $${x.total}`).join('／')}`) : q.error,
-    });
-  };
-
-  const commit = said => {
-    draw();
+  // 讓後續對話（AI）知道卡片現在的狀態
+  const remember = said => {
     const { text, o, ask } = current();
-    state.lastOrder = text;
-    state.pending = ask && !choice ? { add: ask.add } : null;
+    const v = cardView(o, st, second());
+    state.lastOrder = text + (v.size && !o.sizeLabel ? v.size : '');
+    state.pending = ask && !st.choice ? { add: ask.add } : null;
     state.lastItemRegions = o.regions;
     state.lastTopics = o.topics.length ? o.topics : state.lastTopics;
     state.lastWasQuote = true;
-    state.history.push({ role: 'user', content: said }, { role: 'assistant', content: orderToText(o) });
+    const summary = st.mode === 'baf'
+      ? (v.bafRow ? `買一送一（${v.size}，環保杯 ${st.eco} 個）：${v.bafRow.cups.map(c => `${c.role}「${c.name}」$${c.pay}`).join('，')}，兩杯 $${v.bafRow.total}` : (v.error || '買一送一：請選杯型'))
+      : (v.sel ? `${o.summary.name}（${v.size}，環保杯 ${st.eco} 個）合計 $${v.sel.total}` : orderToText(o));
+    state.history.push({ role: 'user', content: said }, { role: 'assistant', content: summary });
   };
+
+  bubble.addEventListener('click', e => {
+    const t = e.target.closest('button');
+    if (!t || !bubble.contains(t)) return;
+    if (t.dataset.mode) {
+      if (st.mode === t.dataset.mode) return;
+      st.mode = t.dataset.mode;
+      if (st.mode === 'one') { st.eco = Math.min(st.eco, 1); st.editing = false; }
+      draw(); remember(st.mode === 'baf' ? '用BAF券' : '單杯');
+    } else if (t.dataset.size) {
+      st.size = t.dataset.size; draw(); remember(st.size);
+    } else if (t.dataset.ice) {
+      if (st.ice === t.dataset.ice) return;
+      st.ice = t.dataset.ice; st.choice = null; draw(); remember(st.ice);
+    } else if (t.dataset.choice) {
+      st.choice = t.dataset.choice; draw(); remember(st.choice === 'yes' ? `要${current().ask?.add || '補'}` : '不補');
+    } else if (t.dataset.eco != null) {
+      st.eco = Number(t.dataset.eco); draw(); remember(`環保杯 ${st.eco} 個`);
+    } else if (t.classList.contains('baf-change')) {
+      st.editing = true; draw(); bubble.querySelector('.baf-input')?.focus();
+    } else if (t.classList.contains('baf-same')) {
+      st.second = null; st.editing = false; draw(); remember('第 2 杯一樣');
+    }
+  });
+  bubble.addEventListener('submit', e => {
+    if (!e.target.classList.contains('baf-form')) return;
+    e.preventDefault();
+    const val = bubble.querySelector('.baf-input').value.trim();
+    st.second = val || null; st.editing = false;
+    draw();
+    if (val) remember(`第 2 杯：${val}`);
+  });
 
   draw();
 }
+
 
 // ---------- AI ----------
 async function askAI(route = null) {
@@ -691,8 +674,6 @@ form.addEventListener('submit', e => { e.preventDefault(); send(input.value); })
 panelImg.src = MENU_SRC;
 loadMenuImage(MENU_SRC).catch(() => {});
 addMessage('bot', renderText(
-`嗨，我是客製化加價小幫手。
-${EFFECTIVE_DATE} 起，補奶、加料、換特殊奶等客製化項目開始加價。
-直接打飲品和想調整的地方，例如「冰蜜柚紅茶少冰大杯」，我會告訴你這杯有沒有奶、要補什麼，並算好總價。記不得全名也沒關係，打「可可」「桂花」這類關鍵字，我會列出符合的飲品。
-有看不懂的地方，我會在收費圖表上用螢光筆標給你看。${wide.matches ? '' : '\n想看完整收費圖表，隨時點右上角的圖表按鈕。'}`), '依收費規則回覆');
+`嗨！打飲品和調整，我幫你算好，例如「冰那堤大杯換燕麥奶」。
+收費看不懂，我會在圖表上用螢光筆標出來。${wide.matches ? '' : '\n完整收費圖表在右上角。'}`, { fold: false }), '依收費規則回覆');
 setChips(WELCOME_CHIPS, '', '常見問題');
