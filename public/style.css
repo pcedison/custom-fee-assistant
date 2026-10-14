@@ -251,9 +251,6 @@ details.more ul { padding-left: 1.1em; }
 }
 
 /* 多杯列表、選擇哪一杯、參考飲品 */
-.drink-list { list-style: none; padding: 0 !important; margin: 0; display: grid; gap: 10px; }
-.drink-card { padding: 0 0 10px; border-bottom: 1px dashed var(--line); }
-.drink-list .drink-card:last-child { border-bottom: 0; padding-bottom: 0; }
 .drink-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .drink-name { font-size: 17px; font-weight: 700; line-height: 1.35; }
 .milk-tag {
@@ -264,7 +261,6 @@ details.more ul { padding-left: 1.1em; }
 .milk-yes { background: var(--house); color: #FFFFFF; }
 .milk-no { background: transparent; color: var(--accent-ink); border: 1.5px solid var(--accent-ink); }
 .milk-part { background: transparent; color: var(--ink-2); border: 1.5px dashed var(--ink-2); }
-.drink-comp { margin-top: 4px !important; font-size: 14px; color: var(--ink-2); line-height: 1.55; }
 .drink-prices { margin-top: 2px !important; font-family: var(--num); font-size: 14.5px; font-variant-numeric: tabular-nums; }
 .tip { font-size: 14px; line-height: 1.6; }
 .alt-btn, .choose-btn {
@@ -279,7 +275,6 @@ details.more ul { padding-left: 1.1em; }
 .choose-btn .drink-name { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
 .choose-btn .milk-tag { font-size: 12px; padding: 4px 8px; }
 .choose-btn .drink-prices { font-size: 13px; color: var(--ink-2); margin: 0 !important; }
-.choose-btn .ref-comp { font-size: 13px; line-height: 1.45; color: var(--ink-2); }
 
 /* 少冰／去冰：要不要補 */
 .ask {

@@ -1,8 +1,8 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610132345';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610132345';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140008';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140008';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -468,6 +468,33 @@ function leftoverWords(rest) {
     .filter(w => w.length >= 2);
 }
 
+// 一次提到好幾杯（「大杯冷萃和特大杯咖啡星冰樂」）：切出每一杯自己的那段字，點一下就算那一杯
+const RE_JOIN = /(還有|然後|加上|以及|再來|和|跟|與|及|、|，|,|＋|\+)/;
+const RE_ASK_TAIL = /(哪一?個|哪一?杯|差在哪|差別|差異|有什麼不同|比較|有奶嗎|有沒有奶|含奶|有牛奶嗎|多少錢|多少|價格|價錢|怎麼算|嗎|呢|？|\?)+$/;
+function multiTexts(fixed, picks) {
+  const hits = picks.map(p => p.hit);
+  const lead = RE_SIZE.test(fixed.slice(0, hits[0].s));
+  const cuts = [];
+  for (let i = 0; i < hits.length - 1; i++) {
+    const a = hits[i].e, b = hits[i + 1].s;
+    const m = fixed.slice(a, b).match(RE_JOIN);
+    if (m) cuts.push([a + m.index, a + m.index + m[0].length]);
+    else {
+      const bs = /[冰熱溫]/.test(fixed[b - 1] || '') ? b - 1 : b; // 「冰」「熱」跟著後面那杯
+      cuts.push(lead ? [a, a] : [bs, bs]);
+    }
+  }
+  return picks.map((pk, i) => {
+    const seg = fixed.slice(i ? cuts[i - 1][1] : 0, i < cuts.length ? cuts[i][0] : fixed.length)
+      .replace(RE_ASK_TAIL, '').replace(RE_JOIN_EDGE, '').trim();
+    const o = seg ? buildOrder(seg) : null;
+    if (o && o.kind === 'drink' && o.drink.id === pk.drink.id && !o.notes.some(n => /沒看懂/.test(n))) return seg;
+    const size = seg.match(RE_SIZE)?.[0] || '';
+    return (pk.tempKnown ? pk.drink.n : baseName(pk.drink.n)) + size;
+  });
+}
+const RE_JOIN_EDGE = /^(還有|然後|加上|以及|再來|和|跟|與|及|、|，|,)+|(還有|然後|加上|以及|和|跟|與|及|、|，|,)+$/g;
+
 export function buildOrder(norm) {
   const fixed = fixNames(norm);
   // 「冰搖茶」「冰搖檸檬茶」：店內菜單一列有紅茶、果茶兩種 → 讓人選
@@ -497,7 +524,8 @@ export function buildOrder(norm) {
   }
   const picks = hits.map(h => ({ ...pickVariant(h.base, fixed, h.idx), hit: h }));
   if (picks.length > 1) {
-    return { kind: 'multi', drinks: picks.slice(0, 4).map(drinkSummary) };
+    const texts = multiTexts(fixed, picks);
+    return { kind: 'multi', drinks: picks.slice(0, 4).map((pk, i) => ({ ...drinkSummary(pk), text: texts[i] })) };
   }
 
   const h0 = hits[0];
@@ -913,7 +941,7 @@ export function localReply(input, state = {}) {
       const ov = TOPIC_BY_ID.overview;
       return {
         source: 'local',
-        text: `${ov.simple}\n\n想更細看哪一項，直接點下面的問題或打字問我。`,
+        text: `${ov.simple}\n\n想更細看哪一項，直接點下面的問題或輸入問題。`,
         regions: ov.regions,
         caption: '先把圖上各區的標題標出來，點圖可以放大。',
         topics: ['overview'],
@@ -984,7 +1012,7 @@ export function localReply(input, state = {}) {
         text: orderToText(order),
         order,
         topics: [],
-        chips: ['哪些飲料有牛奶？', ...order.drinks.slice(0, 2).map(x => `${x.name.replace(/（.*$/, '')}去冰補滿多少？`)],
+        chips: ['哪些飲料有牛奶？'],
       };
     }
     const chips = [];

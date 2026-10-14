@@ -64,6 +64,13 @@ t('冰美式大杯去冰補奶＋環保杯 = $120', () => {
 });
 t('熱飲去冰不收費也不列項', () => assert.equal(order('熱那堤去冰').lines.length, 0));
 t('兩杯一起問 → 分別列出含奶狀態', () => assert.equal(order('拿鐵和美式哪個有奶').kind, 'multi'));
+t('兩杯一起問 → 每杯帶自己的杯型，點了就算那一杯', () => {
+  const o = order('大杯冷萃和特大杯咖啡星冰樂');
+  assert.deepEqual(o.drinks.map(d => d.text), ['大杯冷萃', '特大杯咖啡星冰樂']);
+  const o2 = order('冰那堤大杯冰美式中杯');
+  assert.deepEqual(o2.drinks.map(d => d.text), ['冰那堤大杯', '冰美式中杯']);
+  for (const d of [...o.drinks, ...o2.drinks]) assert.equal(order(d.text).kind, 'drink');
+});
 t('摩卡醬是加料，不是摩卡', () => {
   const o = order('冰那堤加摩卡醬');
   assert.equal(o.drink.n, '冰那堤');
