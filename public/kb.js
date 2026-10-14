@@ -4,7 +4,7 @@
 // 以及最下方 buildSystemPrompt() 給 AI 的規則說明。
 // =============================================================
 
-import { DRINKS, MILK_LABEL, MENU_INFO, CANE_FREE, BASE_SYRUP, isDairyFree, dietSafe, dairyUnsure } from './drinks.js?v=202610141143';
+import { DRINKS, MILK_LABEL, MENU_INFO, CANE_FREE, BASE_SYRUP, isDairyFree, dietSafe, dairyUnsure } from './drinks.js?v=202610141202';
 
 export const EFFECTIVE_DATE = '2026/10/12';
 export const ECO_CUP_DISCOUNT = 10;
@@ -241,7 +241,8 @@ export const TOPICS = [
 - **多加一份濃縮咖啡 +$15／份**
 「／份」代表按份數計價，例如多加兩份就是 +$30。
 不含濃縮咖啡的飲品（例如抹茶那堤、茶那堤、巧克力）：加一份一般濃縮 +$15；要加特選濃縮＝加濃縮 +$15＋特選豆 +$15，一共 +$30。
-單點一杯濃縮咖啡（Espresso）：Solo **$85**、Doppio **$100**（店內菜單）。`,
+「加一份濃縮」是加料：要搭配點購的飲品才能加，每份 +$15。
+單點一杯濃縮咖啡（Espresso）是飲品：Solo **$85**、Doppio **$100**（＝Solo $85＋加一份濃縮 $15）。`,
     simple:
 `換成低咖啡因不用加錢。想要更濃（多一份濃縮），或把豆子換成特選濃縮，每一份都是 $15。`,
     regions: ['esp_head', 'esp_classic', 'esp_decaf', 'esp_upgrade', 'esp_extra'],

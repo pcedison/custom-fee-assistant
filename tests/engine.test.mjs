@@ -412,7 +412,32 @@ t('可調整甜度（●）與沒標示的飲品說明不同', () => {
   assert.ok(/可調整甜度/.test(order('冰醇濃抹茶那堤半糖').notes.join('')));
   assert.ok(/沒有在這杯標示/.test(order('冰福吉茶那堤半糖').notes.join('')));
 });
-t('濃縮咖啡問題附上單點價格 Solo／Doppio', () => assert.ok(/Solo \*\*\$85\*\*/.test(reply('濃縮咖啡多少錢').text)));
+t('濃縮咖啡選擇的說明附上單點價格 Solo／Doppio', () => assert.ok(/Solo \*\*\$85\*\*/.test(reply('濃縮咖啡選擇').text)));
+console.log('單點濃縮咖啡（店長 2026/10/14）');
+t('沒有其他飲品時，「濃縮咖啡」是品名：Solo $85／Doppio $100', () => {
+  for (const q of ['濃縮咖啡', '濃縮咖啡多少錢', '一杯濃縮', 'espresso', 'doppio', 'solo']) {
+    const o = order(q);
+    assert.equal(o?.kind, 'drink', q);
+    assert.equal(o.drink.n, '濃縮咖啡', q);
+    assert.deepEqual(o.sizeTotals.map(x => [x.label, x.total]), [['Solo', 85], ['Doppio', 100]], q);
+  }
+  assert.equal(order('doppio').sizeLabel, 'Doppio');
+  assert.equal(order('兩份濃縮').sizeLabel, 'Doppio');
+});
+t('Solo＋加一份濃縮＝Doppio $100；加兩份＝$115', () => {
+  const o = order('濃縮咖啡加一份濃縮');
+  assert.deepEqual([o.sizeLabel, o.basePrice + o.addTotal], ['Doppio', 100]);
+  const o2 = order('濃縮咖啡加兩份濃縮');
+  assert.equal(o2.sizeTotals.find(x => x.label === 'Solo').total, 115);
+});
+t('「加一份濃縮」是加料：沒有飲品時回答收費說明；有飲品時算進那一杯', () => {
+  for (const q of ['加一份濃縮', '加一份濃縮多少錢', '多加兩份濃縮多少？', '濃縮咖啡要加錢嗎', '升級特選濃縮咖啡多少']) {
+    const r = reply(q);
+    assert.ok(!r.order && r.topics.includes('espresso'), q);
+  }
+  assert.equal(order('冰那堤加一份濃縮').drink.n, '冰那堤');
+  assert.equal(order('冰那堤換低咖啡因濃縮咖啡').drink.n, '冰那堤');
+});
 t('新主題：提袋、無咖啡因、過敏原、季節限定', () => {
   assert.ok(/\$2／個/.test(reply('提袋要錢嗎').text));
   assert.ok(/星沁爽含咖啡因/.test(reply('哪些飲料沒有咖啡因').text));

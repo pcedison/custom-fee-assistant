@@ -1,9 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141143';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141143';
-import { HOMOPHONES } from './homophones.js?v=202610141143';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141202';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141202';
+import { HOMOPHONES } from './homophones.js?v=202610141202';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -554,6 +554,22 @@ function multiTexts(fixed, picks) {
 }
 const RE_JOIN_EDGE = /^(還有|然後|加上|以及|再來|和|跟|與|及|、|，|,)+|(還有|然後|加上|以及|和|跟|與|及|、|，|,)+$/g;
 
+// 單點濃縮咖啡（店長 2026/10/14）：「加一份濃縮」是加料動詞（要搭配飲品）；
+// 沒有其他飲品時，「濃縮咖啡」「濃縮」「兩份濃縮」就是品名：Solo $85、Doppio $100（＝Solo＋加一份濃縮）
+const RE_ESP_WORD = /濃縮咖啡|濃縮|espresso/g;
+const RE_ESP_ADDON_BEFORE = /(?:加|多|再|另|升級|換|補|特選|精選|低咖啡因|無咖啡因|低因|經典|用)(?:\d{1,2}|[一二兩三四五六七八九十]{1,3})?(?:份|個|shot)?$/;
+const RE_ESP_ADDON_AFTER = /^(?:咖啡)?(?:選擇|選項|豆|種類|的種類|有哪些|可以加|能加|加幾|要加錢|加錢|要錢|收費|怎麼加|怎麼算|升級|是什麼|系列|的價格)/;
+export function espressoProduct(fixed) {
+  if (fixed.includes('單點濃縮咖啡')) return null;
+  for (const m of fixed.matchAll(RE_ESP_WORD)) {
+    const before = fixed.slice(Math.max(0, m.index - 6), m.index);
+    const after = fixed.slice(m.index + m[0].length);
+    if (RE_ESP_ADDON_BEFORE.test(before) || RE_ESP_ADDON_AFTER.test(after)) continue;
+    return fixed.slice(0, m.index) + '單點濃縮咖啡' + after;
+  }
+  return null;
+}
+
 const RE_MORE_SYRUP = /(鹹焦糖|香草|焦糖|榛果|蔗糖)(?:風味)?(?:糖漿)?(?:多加一下|多加一點|多一下|多一點|多一些|加多一點)/g;
 const RE_SWEET_UP = /(?<![少微減不無])(?:再甜一點|多甜一點|甜一點|甜一些|多點甜|多一點甜|甜度高一點|甜度加|更甜|加甜)/g;
 const RE_RM_BASE = /(?:不要|去掉|去除|拿掉|不加|移除|不放)(鹹焦糖|香草|焦糖|榛果)(?!風味淋醬|淋醬|醬)(?:風味)?(?:糖漿)?|(鹹焦糖|香草|焦糖|榛果)(?:風味)?(?:糖漿)?(?:不要|去掉|拿掉|移除)/g;
@@ -573,6 +589,8 @@ export function buildOrder(norm) {
   // 「哪些飲料有牛奶」「不含牛奶」：這裡的牛奶是成分，不是「熱牛奶」這杯飲品
   const hits = findDrinks(fixed).filter(h => !(h.base === '牛奶' && /(有|含|沒|無|加|補|換|去|少|多|跟|和)$/.test(fixed.slice(0, h.s))));
   if (!hits.length) {
+    const espText = espressoProduct(fixed);
+    if (espText) return buildOrder(espText);
     const found = searchDrinks(fixed);
     if (!found.length) return null;
     if (found.length === 1) return buildOrder(fixed.replace(found[0].core, found[0].base));
@@ -880,8 +898,23 @@ export function buildOrder(norm) {
 
   if (lines.some(l => l.amount == null && !l.status)) notes.push('標示「未列價」的項目沒有算進合計。');
 
+  // 有 Solo／Doppio 的飲品（單點濃縮咖啡）
+  let szLabel = null;
+  if (d.sz) {
+    if (/doppio|雙份|(?<![加多再另])(?:兩|二|2)份/.test(fixed)) szLabel = 'Doppio';
+    else if (/solo|單份/.test(fixed)) szLabel = 'Solo';
+    const exI = lines.findIndex(l => l.id === 'esp_extra');
+    if (exI !== -1 && szLabel !== 'Doppio' && lines[exI].amount === 15) {
+      lines.splice(exI, 1);
+      szLabel = 'Doppio';
+      notes.push('單點濃縮咖啡 Solo $85＋加一份濃縮 $15＝Doppio $100。');
+    }
+    notes.push('「加一份濃縮」要搭配點購的飲品才能加（+$15／份）；單點濃縮咖啡：Solo $85、Doppio $100。');
+  }
+
   let basePrice = null;
-  if (sizeIdx != null) {
+  if (szLabel) basePrice = d.sz.find(([l]) => l === szLabel)?.[1] ?? null;
+  if (sizeIdx != null && !d.sz) {
     basePrice = d.p[sizeIdx];
     if (basePrice == null) {
       const avail = d.p.map((p, i) => (p == null ? null : SIZE_LABEL[i])).filter(Boolean).join('、');
@@ -903,7 +936,7 @@ export function buildOrder(norm) {
     summary: drinkSummary(pk),
     drink: d,
     tempKnown: pk.tempKnown,
-    sizeIdx, sizeLabel: sizeIdx != null ? SIZE_LABEL[sizeIdx] : null,
+    sizeIdx, sizeLabel: szLabel || (sizeIdx != null && !d.sz ? SIZE_LABEL[sizeIdx] : null),
     basePrice, lines, addTotal, sizeTotals, notes, tips, ask, iceWord, match,
     eco, baf: bogo, // 點單裡提到買一送一／BAF → 卡片直接打開 BAF 試算
     // 冰飲、可補、還沒指定冰量 → 卡片上給「正常冰／少冰／去冰」按鈕
