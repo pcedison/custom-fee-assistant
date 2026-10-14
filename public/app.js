@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610140008';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610140008';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610140008';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610140226';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610140226';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610140226';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -165,6 +165,7 @@ function renderDrinkCard(o, st, o2, ask = null) {
     ${o.aiSaid ? `<p class="ai-said">AI 判讀：${esc(o.aiSaid)}</p>` : ''}
     <div class="dc">
       <div class="dc-head"><p class="dc-name">${esc(s.name)}</p>${milkTag(s)}</div>
+      ${typoNote(o.typos)}
       ${alts}
       <div class="seg dc-mode" role="group" aria-label="計算方式">
         <button type="button" data-mode="one" aria-pressed="${st.mode === 'one'}">單杯</button>
@@ -328,8 +329,12 @@ const HEALTH_NOTE = '<p class="note">⚠️ 店內菜單：現場調製飲料，
 const ALLERGY_NOTE = '<p class="note">⚠️ 對牛奶過敏：點餐時請先告訴夥伴。奶油、冰淇淋也是乳製品。店內菜單註明：設備清洗後可能仍無法避免牛奶等過敏原殘留，有疑慮建議點購罐裝飲品。</p>';
 const healthNote = h => (h === 'allergy' ? ALLERGY_NOTE : HEALTH_NOTE);
 
+// 同音錯字自動更正：小字標出改了什麼，讓人一眼確認
+const typoNote = list => (list?.length ? `<p class="typo-note">已自動更正：${list.map(f => `${esc(f.from)}→${esc(f.to)}`).join('、')}</p>` : '');
+
 function botReply(r, userText) {
   let body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
+  if (r.typos?.length && r.order?.kind !== 'drink') body = typoNote(r.typos) + body;
   if (r.refs?.length) body += renderRefs(r.refs, r.refsTitle);
   if (r.health) body += healthNote(r.health);
   if (r.order && r.health) r.order.health = r.health;
@@ -364,9 +369,10 @@ function setupCard(row, firstOrder, baseText) {
     const o = st.choice === 'yes' && ask ? buildOrder(text + ask.add) : base;
     if (o && firstOrder.aiSaid) o.aiSaid = firstOrder.aiSaid;
     if (o && firstOrder.aiNote) o.aiNote = firstOrder.aiNote;
+    if (o && firstOrder.typos) o.typos = firstOrder.typos;
     return { text: st.choice === 'yes' && ask ? text + ask.add : text, o, ask };
   };
-  const second = () => (st.second ? buildOrder(normalize(st.second)) : null);
+  const second = () => (st.second ? buildOrder(fixHomophones(normalize(st.second)).text) : null);
 
   const draw = () => {
     const { o, ask } = current();

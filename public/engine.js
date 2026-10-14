@@ -1,8 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140008';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140008';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140226';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140226';
+import { HOMOPHONES } from './homophones.js?v=202610140226';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -25,6 +26,64 @@ export function parseNum(s) {
 // 全形轉半形、轉小寫、去空白
 export function normalize(text) {
   return String(text || '').normalize('NFKC').toLowerCase().replace(/\s+/g, '');
+}
+
+// ---------------------------------------------------------------
+// 同音錯字更正：注音輸入選錯字（冷翠→冷萃、雁麥→燕麥、農縮→濃縮、馬奇朵→瑪奇朵）
+//   比對對象：品名、別稱、加料用詞（2 字以上）。讀音不分聲調。
+//   不改的情況：
+//   - 原本就寫對的詞，裡面的字不改（例如「焦糖」寫對了，只改「馬」）
+//   - 2 個字的詞，至少要有 1 個字相同（例如「沒事」不會變成「美式」）
+//   - 2 個字的詞，要換掉的字是常用虛字（要、的、不、這…）
+//   - HOMO_KEEP 裡的常用詞
+// ---------------------------------------------------------------
+const SYL_OF = new Map();
+for (const [syl, cs] of Object.entries(HOMOPHONES)) {
+  for (const ch of cs) {
+    if (!SYL_OF.has(ch)) SYL_OF.set(ch, []);
+    SYL_OF.get(ch).push(syl);
+  }
+}
+export const sameSound = (a, b) => a === b || (SYL_OF.get(a) || []).some(x => (SYL_OF.get(b) || []).includes(x));
+const LEXICON = [...new Set([
+  ...DRINKS.map(d => d.n),
+  ...Object.entries(DRINK_ALIASES).flat(2),
+  ...ITEMS.flatMap(it => (it.names || []).map(n => (typeof n === 'string' ? n : n.n))),
+  '拿鐵', '星冰樂', '紅茶', '綠茶', '果茶', '可可', '蜜柚', '檸檬', '蛋白', '咖啡', '牛奶', '氮氣', '伯爵', '星沁爽', '冰沙', '歐蕾',
+  '環保杯', '自備杯', '隨行杯', '保溫杯', '買一送一', '好友分享', '短杯', '中杯', '大杯', '特大杯', '少冰', '去冰', '正常冰',
+  '一份', '兩份', '三份', '四份',
+].map(t => normalize(t)).filter(t => t.length >= 2 && /^\p{Script=Han}+$/u.test(t)))].sort((a, b) => b.length - a.length);
+// 常用詞，剛好和品名同音：當成寫對的詞，不改（「帶杯」≠「大杯」、「全職」≠「全脂」）
+const HOMO_KEEP = ['帶杯', '全職', '低音', '紅油'];
+// 2 字的詞：要被換掉的字如果是常用虛字（「冰要」≠「冰搖」、「不滿」≠「補滿」、「這糖」≠「蔗糖」），不改
+const FUNC_CHARS = new Set('要的是在有了不也就都這那個我你他她它們會能可以和跟與及或還再很太吧嗎呢啊喔');
+export function fixHomophones(norm) {
+  const cs = norm.split('');
+  const keep = new Uint8Array(cs.length);
+  for (const t of [...LEXICON, ...HOMO_KEEP]) {
+    for (let i = norm.indexOf(t); i !== -1; i = norm.indexOf(t, i + 1)) keep.fill(1, i, i + t.length);
+  }
+  const used = new Uint8Array(cs.length);
+  const out = cs.slice();
+  const fixes = [];
+  for (const t of LEXICON) {
+    const n = t.length;
+    for (let i = 0; i + n <= cs.length; i++) {
+      let same = 0, ok = true;
+      for (let j = 0; j < n && ok; j++) {
+        const a = cs[i + j], b = t[j];
+        if (used[i + j]) ok = false;
+        else if (a === b) same++;
+        else if (keep[i + j] || !SYL_OF.has(a) || !sameSound(a, b) || (n === 2 && FUNC_CHARS.has(a))) ok = false;
+      }
+      if (!ok || same === n || (n === 2 && same === 0)) continue;
+      const from = cs.slice(i, i + n).join('');
+      fixes.push({ from, to: t });
+      for (let j = 0; j < n; j++) { out[i + j] = t[j]; used[i + j] = 1; }
+      i += n - 1;
+    }
+  }
+  return { text: out.join(''), fixes };
 }
 
 // 先把「焦糖瑪奇朵、香草拿鐵、抹茶拿鐵」這類飲品名稱遮掉，避免誤判成加料
@@ -852,6 +911,16 @@ export function wantsImage(norm) {
 // 主流程：能用關鍵字回答就回答；回 null 代表交給 AI
 // ---------------------------------------------------------------
 export function localReply(input, state = {}) {
+  const fx = fixHomophones(normalize(input));
+  const r = replyCore(fx.text, state);
+  if (r && fx.fixes.length) {
+    r.typos = fx.fixes;
+    if (r.order) r.order.typos = fx.fixes;
+  }
+  return r;
+}
+
+function replyCore(input, state) {
   let norm = normalize(input);
   if (!norm) return null;
 

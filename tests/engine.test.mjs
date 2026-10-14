@@ -1,7 +1,8 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
-import { localReply, computeQuote, normalize, parseAiReply, buildOrder, bafQuote, singleQuote, ecoCountFrom, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
-import { DRINKS, dietSafe } from '../public/drinks.js';
+import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixHomophones, bafQuote, singleQuote, ecoCountFrom, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
+import { DRINKS, DRINK_ALIASES, dietSafe } from '../public/drinks.js';
+import { HOMOPHONES } from '../public/homophones.js';
 import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
 import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
 import { onRequestPost } from '../functions/api/chat.js';
@@ -463,6 +464,31 @@ t('「用BAF券」沿用上一杯並打開買一送一試算', () => {
   assert.ok(reply('冰那堤大杯 買一送一').order.baf);
 });
 t('買一送一問答：寫出環保杯鐵律（每一杯用環保杯就折 $10）', () => assert.match(reply('買一送一券怎麼算').text, /每一杯用環保杯就折 \$10/));
+
+console.log('同音錯字');
+t('「特大杯冷翠，再加一份濃縮」→ 冷萃咖啡特大杯＋加一份濃縮', () => {
+  const r = reply('我要一杯特大杯冷翠，再加一份濃縮');
+  assert.equal(r.order?.kind, 'drink');
+  assert.equal(r.order.drink.n, '冷萃咖啡');
+  assert.equal(r.order.sizeLabel, '特大杯');
+  assert.ok(r.order.lines.some(l => /濃縮/.test(l.label) && l.amount === 15));
+  assert.deepEqual(r.typos, [{ from: '冷翠', to: '冷萃' }]);
+});
+t('常見同音錯字都改得回來', () => {
+  const cases = { 焦糖馬奇朵: '焦糖瑪奇朵', 冰那堤換雁麥奶: '冰那堤換燕麥奶', 冰那堤加農縮: '冰那堤加濃縮', 冰的星兵樂: '冰的星冰樂', 香草那題: '香草那堤', 環報杯可以折嗎: '環保杯可以折嗎', 加一下香草糖將: '加一下香草糖漿' };
+  for (const [q, want] of Object.entries(cases)) assert.equal(fixHomophones(q).text, want, q);
+});
+t('寫對的字、常用詞不亂改', () => {
+  for (const q of ['冰美式少冰補美式', '美式和那堤差在哪', '我乳糖不耐可以喝什麼', '沒事', '教堂', '可以加奶嗎', '我很不滿意', '這糖漿要加錢嗎', '卡布奇諾', '冰搖紅茶', '大杯冰那堤', '環保杯可以折幾元']) {
+    assert.deepEqual(fixHomophones(normalize(q)).fixes, [], q);
+  }
+});
+t('同音字表涵蓋所有品名、別稱、加料用字（新品有新字時要重跑 build-homophones）', () => {
+  const have = new Set(Object.values(HOMOPHONES).join(''));
+  const names = [...DRINKS.map(d => d.n), ...Object.entries(DRINK_ALIASES).flat(2), ...ITEMS.flatMap(it => (it.names || []).map(n => (typeof n === 'string' ? n : n.n)))];
+  const miss = [...new Set(names.join('').match(/\p{Script=Han}/gu))].filter(c => !have.has(c));
+  assert.deepEqual(miss, []);
+});
 
 console.log('語意分流');
 const TH = { soft: 0.7, margin: 0.05 };
