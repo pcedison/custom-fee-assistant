@@ -1,9 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140226';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140226';
-import { HOMOPHONES } from './homophones.js?v=202610140226';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140602';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140602';
+import { HOMOPHONES } from './homophones.js?v=202610140602';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -566,7 +566,8 @@ export function buildOrder(norm) {
       options: bases.map(b => ({ ...drinkSummary(pickVariant(b, fixed, at)), text: fixed.slice(0, at) + b + fixed.slice(at + alias.length) })),
     };
   }
-  const hits = findDrinks(fixed);
+  // 「哪些飲料有牛奶」「不含牛奶」：這裡的牛奶是成分，不是「熱牛奶」這杯飲品
+  const hits = findDrinks(fixed).filter(h => !(h.base === '牛奶' && /(有|含|沒|無|加|補|換|去|少|多|跟|和)$/.test(fixed.slice(0, h.s))));
   if (!hits.length) {
     const found = searchDrinks(fixed);
     if (!found.length) return null;
@@ -913,6 +914,11 @@ export function wantsImage(norm) {
 export function localReply(input, state = {}) {
   const fx = fixHomophones(normalize(input));
   const r = replyCore(fx.text, state);
+  // 追問（「大杯呢？」「用環保杯呢？」）：飲品沿用上一杯，這句本身沒有提到飲品
+  if (r?.order && state.lastOrder) {
+    const own = buildOrder(fixNames(normalize(fx.text)));
+    if (!own || own.kind !== r.order.kind) r.followup = true;
+  }
   if (r && fx.fixes.length) {
     r.typos = fx.fixes;
     if (r.order) r.order.typos = fx.fixes;

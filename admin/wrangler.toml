@@ -1,0 +1,24 @@
+# 後台 Worker：使用統計（只有自己看得到）
+# Workers Builds 設定：Root directory 填 admin，部署指令用預設的 npx wrangler deploy
+name = "custom-fee-admin"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# 用 workers.dev 網址開啟，並在 Cloudflare 主控台開啟 Cloudflare Access（只允許自己的 Email）
+workers_dev = true
+# 不開預覽網址，避免出現沒有門禁的網址
+preview_urls = false
+
+[vars]
+# Cloudflare Access 開啟後，後台頁面會顯示這兩個值，填進來再推送
+TEAM_DOMAIN = ""
+POLICY_AUD = ""
+
+# 和主站同一個 D1 資料庫（只讀取）。建立 D1 後填入 database_id 再取消註解
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "custom-fee-stats"
+# database_id = ""
+
+[observability]
+enabled = true

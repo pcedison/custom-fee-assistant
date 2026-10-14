@@ -6,6 +6,9 @@ import { HOMOPHONES } from '../public/homophones.js';
 import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
 import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
 import { onRequestPost } from '../functions/api/chat.js';
+import { onEventPost, parseUA, sourceOf, maskPII } from '../functions/api/stats.js';
+import { regionLabel, mergeDrinks, toCSV, netLabel, questionRegion, rangeStart } from '../admin/lib.js';
+import { checkAccess } from '../admin/access.js';
 import { REGIONS, TOPICS, ITEMS } from '../public/kb.js';
 
 let pass = 0;
@@ -465,6 +468,14 @@ t('「用BAF券」沿用上一杯並打開買一送一試算', () => {
 });
 t('買一送一問答：寫出環保杯鐵律（每一杯用環保杯就折 $10）', () => assert.match(reply('買一送一券怎麼算').text, /每一杯用環保杯就折 \$10/));
 
+t('「哪些飲料有牛奶？」是問含奶清單，不是「熱牛奶」這杯', () => {
+  for (const q of ['哪些飲料有牛奶？', '有牛奶的飲料有哪些', '哪些不含牛奶']) {
+    const r = reply(q);
+    assert.notEqual(r?.order?.kind, 'drink', q);
+  }
+  assert.equal(order('熱牛奶大杯').drink.n, '熱牛奶');
+});
+
 console.log('同音錯字');
 t('「特大杯冷翠，再加一份濃縮」→ 冷萃咖啡特大杯＋加一份濃縮', () => {
   const r = reply('我要一杯特大杯冷翠，再加一份濃縮');
@@ -489,6 +500,124 @@ t('同音字表涵蓋所有品名、別稱、加料用字（新品有新字時�
   const miss = [...new Set(names.join('').match(/\p{Script=Han}/gu))].filter(c => !have.has(c));
   assert.deepEqual(miss, []);
 });
+
+console.log('使用統計');
+t('裝置、作業系統、瀏覽器', () => {
+  assert.deepEqual(parseUA('Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/15.8.0'), { os: 'iOS', device: 'mobile', browser: 'LINE' });
+  assert.deepEqual(parseUA('Mozilla/5.0 (Linux; Android 15; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36'), { os: 'Android', device: 'mobile', browser: 'Chrome' });
+  assert.equal(parseUA('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15', 5).device, 'tablet');
+  assert.equal(parseUA('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0').browser, 'Edge');
+});
+t('開啟來源', () => {
+  assert.equal(sourceOf({ ref: 'https://www.google.com/', browser: 'Chrome' }), 'Google');
+  assert.equal(sourceOf({ ref: '', browser: 'LINE' }), 'LINE');
+  assert.equal(sourceOf({ ref: 'https://l.facebook.com/l.php', browser: 'Safari' }), 'Facebook');
+  assert.equal(sourceOf({ ref: 'https://a.workers.dev/', host: 'a.workers.dev' }), '直接開啟');
+  assert.equal(sourceOf({ utm: 'Store_QR' }), 'utm:store_qr');
+});
+t('原句遮掉個人資料，價格和品名照留', () => {
+  assert.equal(maskPII('我的電話是0912-345-678，冰那堤大杯$140'), '我的電話是［已遮蔽］，冰那堤大杯$140');
+  assert.equal(maskPII('寄到 a.b@gmail.com 身分證A123456789'), '寄到 ［已遮蔽］ 身分證［已遮蔽］');
+  assert.equal(maskPII('卡號 4111 1111 1111 1111'), '卡號 ［已遮蔽］');
+  assert.equal(maskPII('兩杯冰美式特大杯去冰補美式'), '兩杯冰美式特大杯去冰補美式');
+});
+t('後台：縣市、網路業者、飲品合併、CSV', () => {
+  assert.equal(regionLabel({ country: 'TW', region_code: 'NWT', region: 'New Taipei' }), '新北市');
+  assert.equal(regionLabel({ country: 'TW', region_code: null, region: 'Taichung City' }), '台中市');
+  assert.equal(regionLabel({ country: 'JP', region_code: '13', region: 'Tokyo' }), '海外：JP Tokyo');
+  assert.equal(questionRegion('TPE'), '台北市');
+  assert.equal(netLabel('Chunghwa Telecom Co., Ltd.'), '中華電信');
+  const m = mergeDrinks([{ name: '冰那堤', n: 5 }, { name: '那堤', n: 2 }, { name: '冰搖紅茶', n: 3 }, { name: '熱美式咖啡', n: 1 }]);
+  assert.deepEqual(m.map(x => [x.name, x.n]), [['那堤', 7], ['冰搖紅茶', 3], ['美式咖啡', 1]]);
+  assert.equal(toCSV(['a'], [['=1+1'], ['x,"y"']]), '﻿a\r\n\'=1+1\r\n"x,""y"""\r\n');
+  assert.equal(rangeStart('today', Date.parse('2026-10-14T17:00:00Z')), '2026-10-15');
+  assert.equal(rangeStart('7', Date.parse('2026-10-14T03:00:00Z')), '2026-10-08');
+});
+// 假的 D1：記錄寫入內容
+function fakeD1() {
+  const rows = { salts: [], visits: [], questions: [] };
+  const stmt = sql => ({
+    sql, args: [],
+    bind(...a) { this.args = a; return this; },
+    async first() { return /FROM salts/.test(sql) ? (rows.salts.find(r => r.day === this.args[0]) || null) : null; },
+    async run() {
+      if (/INSERT OR IGNORE INTO salts/.test(sql)) rows.salts.push({ day: this.args[0], salt: this.args[1] });
+      if (/INSERT INTO visits/.test(sql)) rows.visits.push(this.args);
+      if (/INSERT INTO questions/.test(sql)) rows.questions.push(this.args);
+      return {};
+    },
+    async all() { return { results: [] }; },
+  });
+  return { rows, prepare: stmt, async batch(list) { for (const x of list) await x.run(); return list.map(() => ({ results: [] })); } };
+}
+const evReq = (body, headers = {}) => new Request('https://x.workers.dev/api/e', {
+  method: 'POST', body: JSON.stringify(body),
+  headers: { 'Content-Type': 'application/json', 'Sec-Fetch-Site': 'same-origin', 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) Safari/604.1', 'CF-Connecting-IP': '203.0.113.9', ...headers },
+});
+await (async () => {
+  const DB = fakeD1();
+  const r1 = await onEventPost({ request: evReq({ t: 'v', ref: '', tp: 5 }), env: { DB } });
+  await onEventPost({ request: evReq({ t: 'q', q: '電話0912345678 冰那堤', via: 'local', kind: 'drink', drinks: ['冰那堤'], topics: [], typos: ['冷翠→冷萃'] }), env: { DB } });
+  t('統計：寫入開啟與提問（遮掉個資、不存 IP）', () => {
+    assert.equal(r1.status, 204);
+    assert.equal(DB.rows.visits.length, 1);
+    assert.equal(DB.rows.questions.length, 1);
+    const q = DB.rows.questions[0];
+    assert.equal(q[4], '電話［已遮蔽］ 冰那堤');
+    assert.equal(q[7], '["冰那堤"]');
+    assert.ok(!JSON.stringify(DB.rows).includes('203.0.113.9'));
+  });
+  const DB2 = fakeD1();
+  await onEventPost({ request: evReq({ t: 'v' }, { 'Sec-Fetch-Site': 'cross-site' }), env: { DB: DB2 } });
+  const r2 = await onEventPost({ request: evReq({ t: 'v' }), env: {} });
+  t('統計：別的網站送來的不收；沒有資料庫時不出錯', () => {
+    assert.equal(DB2.rows.visits.length, 0);
+    assert.equal(r2.status, 204);
+  });
+})();
+
+// 後台門禁：用自己產生的金鑰模擬 Cloudflare Access 的 JWT
+await (async () => {
+  const TEAM = 'https://vibebrick.cloudflareaccess.com', AUD = 'aud-test-123';
+  const { publicKey, privateKey } = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const jwk = { ...(await crypto.subtle.exportKey('jwk', publicKey)), kid: 'k1', alg: 'RS256' };
+  const b64 = x => Buffer.from(typeof x === 'string' ? x : JSON.stringify(x)).toString('base64url');
+  async function jwt(payload, kid = 'k1') {
+    const head = b64({ alg: 'RS256', kid, typ: 'JWT' }), body = b64(payload);
+    const sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', privateKey, new TextEncoder().encode(`${head}.${body}`));
+    return `${head}.${body}.${Buffer.from(sig).toString('base64url')}`;
+  }
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async url => (String(url) === `${TEAM}/cdn-cgi/access/certs` ? new Response(JSON.stringify({ keys: [jwk] })) : new Response('no', { status: 404 }));
+  const now = Math.floor(Date.now() / 1000);
+  const good = { iss: TEAM, aud: [AUD], email: 'owner@example.com', exp: now + 600, iat: now };
+  const req = (token, host = 'custom-fee-admin.x.workers.dev') => new Request(`https://${host}/`, { headers: token ? { 'Cf-Access-Jwt-Assertion': token } : {} });
+  const env = { TEAM_DOMAIN: TEAM, POLICY_AUD: AUD };
+  const ok = await checkAccess(req(await jwt(good)), env);
+  const noToken = await checkAccess(req(null), env);
+  const setup = await checkAccess(req(await jwt(good)), {});
+  const wrongAud = await checkAccess(req(await jwt({ ...good, aud: ['other'] })), env);
+  const expired = await checkAccess(req(await jwt({ ...good, exp: now - 10 })), env);
+  const t0 = await jwt(good); const tampered = t0.replace(/\.[^.]+\./, `.${b64({ ...good, email: 'evil@example.com' })}.`);
+  const forged = await checkAccess(req(tampered), env);
+  const wrongEmail = await checkAccess(req(await jwt(good)), { ...env, ADMIN_EMAIL: 'someone@example.com' });
+  const devRemote = await checkAccess(req(null), { DEV_NO_ACCESS: '1' });
+  const devLocal = await checkAccess(req(null, 'localhost:8788'), { DEV_NO_ACCESS: '1' });
+  globalThis.fetch = realFetch;
+  t('後台門禁：正確的 Access JWT 才能進入', () => {
+    assert.equal(ok.ok, true);
+    assert.equal(noToken.why, 'no_access');
+    assert.deepEqual([setup.ok, setup.why, setup.iss, setup.aud], [false, 'setup', TEAM, AUD]);
+    assert.equal(wrongAud.ok, false);
+    assert.equal(expired.ok, false);
+    assert.equal(forged.ok, false);
+    assert.equal(wrongEmail.ok, false);
+  });
+  t('後台門禁：略過門禁只在本機有效', () => {
+    assert.equal(devRemote.ok, false);
+    assert.equal(devLocal.ok, true);
+  });
+})();
 
 console.log('語意分流');
 const TH = { soft: 0.7, margin: 0.05 };

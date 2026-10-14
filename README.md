@@ -76,25 +76,60 @@ public/              ← 網站本體（Cloudflare Pages 的輸出目錄）
   menu.jpg           收費圖表
   _headers           安全性與快取標頭
 functions/api/chat.js  ← AI 後端（Workers AI／Gemini／OpenRouter，金鑰只在這裡讀取）
+functions/api/stats.js ← 匿名使用統計（POST /api/e，寫入 D1）
 src/worker.js          ← Cloudflare Workers 入口
+admin/                 ← 後台 Worker（custom-fee-admin）：使用統計，只有管理者看得到
 tests/engine.test.mjs  ← 規則測試（npm test）
 scripts/               ← stamp-version.mjs（加版本號）、build-homophones.mjs（產生同音字表）
 ```
 
-## 部署到 GitHub Pages（不含 AI）
+## GitHub Pages（已停用，只轉址）
 
-`gh-pages` 分支就是 `public/` 的內容，推上去後網址為 `https://<帳號>.github.io/<repo 名稱>/`。
-GitHub Pages 只能放靜態檔案，無法保管 API 金鑰，所以在 `github.io` 上 AI 補位會自動關閉，其餘功能（關鍵字問答、加價試算、螢光筆標圖）照常運作。
-若之後要開啟 AI，把同一個 repo 接到 Cloudflare Pages（見下一節）即可。
-
-更新網站（先加版本號，避免手機抓到舊快取）：
+2026/10/14 起只使用 Cloudflare Workers 網址（有 AI、有使用統計）。`gh-pages` 分支只剩一個轉址頁：舊的 `github.io` 連結會自動轉到 Workers 網址（加上 `?utm_source=github`，後台看得到從舊連結來的人數）。
+更新網站只要推送 `main`，不用再更新 `gh-pages`：
 
 ```bash
 node scripts/stamp-version.mjs
 git add -A && git commit -m "更新"
-git branch -f gh-pages $(git subtree split --prefix public)
-git push origin main && git push -f origin gh-pages
+git push origin main
 ```
+
+## 後台：使用統計（只有管理者看得到）
+
+主站畫面上沒有任何後台的按鍵或連結。後台是另一個 Worker（`custom-fee-admin`），用 Cloudflare Access 鎖住，只有指定的 Email 登入得了。
+
+**記錄什麼**
+- 開啟頁面：縣市與地區（Cloudflare 用 IP 推算）、網路業者、裝置（手機／平板／電腦）、作業系統、瀏覽器、開啟來源（LINE、Facebook、Google、直接開啟…）。
+- 每次提問：原句、判讀出的飲品、問題類型、回答方式（規則／AI）、自動更正、模糊比對的字、提問方式（輸入／點建議問題／點飲品）。
+- 追問（「大杯呢？」）不重複計入飲品排行。
+
+**不記錄什麼**
+- 不存 IP、不放 cookie、看不到手機型號。
+- 使用人數用「每天更換鹽值的雜湊」估算，隔天鹽值刪除，無法回推是誰。
+- 原句裡的電話、Email、身分證字號、卡號、8 碼以上數字，存進資料庫前就遮成「［已遮蔽］」。
+- 原句保留 `STATS_TEXT_DAYS` 天（預設 180），每天台北時間 03:00 自動清除過期原句；統計數字保留。
+
+**縣市準確度**：IP 推算不是 GPS。用手機網路（4G/5G）時，常被算成電信機房所在的城市；家用寬頻、Wi‑Fi 比較準。後台的「網路業者」可以幫忙判斷。
+
+**後台內容**：期間（今天／7／30／90 天）、開啟次數、使用人數、提問次數、交給 AI 的比例、縣市、地區、網路業者、裝置、作業系統、開啟來源、前 10 名飲品（冰熱合併）、前 10 名問題類型、每日提問、提問時段、模糊比對的字、自動更正、提問紀錄（可篩選「交給 AI」「規則沒答到」等），以及下載 CSV（給語意優化用）。
+
+**自己測試不想被算進去**：在主站網址後面加 `#nostats` 開一次，這台裝置之後就不列入統計；加 `#stats` 恢復。
+
+### 設定步驟（只要做一次）
+
+1. **建立 D1 資料庫**：Cloudflare 主控台 → Storage & databases → D1 SQL database → Create database，名稱 `custom-fee-stats`。複製 Database ID。
+2. **填入 Database ID**：把 `wrangler.toml` 和 `admin/wrangler.toml` 裡的 `[[d1_databases]]` 取消註解，填入 `database_id`，推送 `main`。資料表會在第一次寫入時自動建立。
+3. **建立後台 Worker**：Workers & Pages → Create → Import a repository → 選這個 repo。
+   - Project name：`custom-fee-admin`（要和 `admin/wrangler.toml` 的 name 一樣）
+   - Root directory：`admin`
+   - 部署指令維持預設 `npx wrangler deploy`
+4. **開啟門禁**：custom-fee-admin → Settings → Domains & Routes → workers.dev → Enable Cloudflare Access → Manage Cloudflare Access，只留自己的 Email。
+5. **完成驗證設定**：打開後台網址，登入後頁面會顯示 `TEAM_DOMAIN` 和 `POLICY_AUD`。把兩個值填進 `admin/wrangler.toml` 的 `[vars]`，推送 `main`。
+6. 之後從 Cloudflare 主控台 → Workers & Pages → custom-fee-admin → 網址開啟後台。
+
+設定完成前，後台只顯示設定說明，不會顯示任何資料。主站沒有連接 D1 時，統計會直接略過，不影響回答。
+
+**本機測試**：`wrangler dev` 時可在後台設定 `DEV_NO_ACCESS = "1"` 略過門禁；這個設定只在 `localhost`／`127.0.0.1` 有效，正式網址一律要通過 Access。
 
 ## 部署到 Cloudflare Workers（含 AI）
 

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>使用統計｜客製化加價小幫手</title>
+<style nonce="{{NONCE}}">
+:root {
+  --bg: #F2F0EB; --paper: #FFFFFF; --ink: #1F1F1F; --ink-2: #63666A; --line: #E1DDD3;
+  --house: #1E3932; --accent: #00754A; --tint: #D4E9E2; --bar: #00754A; --warn: #8A4B00;
+  --font: "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Microsoft JhengHei", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0F1B17; --paper: #1A2D26; --ink: #F2F0EB; --ink-2: #A3B4AC; --line: #2B443A;
+    --accent: #5CC79C; --tint: #1E3A30; --bar: #00A862; --warn: #F2C26B;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--font); }
+header.top { background: var(--house); color: #fff; }
+header.top .in { max-width: 1180px; margin: 0 auto; padding: 18px 16px 16px; }
+header.top h1 { margin: 0; font-size: 22px; line-height: 1.3; }
+header.top p { margin: 2px 0 0; font-size: 13px; color: rgba(255,255,255,.75); }
+main { max-width: 1180px; margin: 0 auto; padding: 16px 16px 48px; }
+
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 4px 0 16px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--paper); }
+.seg button { border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 14px; padding: 7px 14px; cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 700; }
+@media (prefers-color-scheme: dark) { .seg button[aria-pressed="true"] { background: #00754A; } }
+.filters .since { font-size: 13px; color: var(--ink-2); }
+.filters .spacer { flex: 1; }
+a.btn, button.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 10px; padding: 7px 14px; font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
+a.btn:hover, button.btn:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.notice { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.kpi { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.kpi .k { font-size: 13px; color: var(--ink-2); }
+.kpi .v { font-size: 32px; font-weight: 700; line-height: 1.2; margin-top: 2px; }
+.kpi .s { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+@media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+h2 { font-size: 17px; margin: 28px 0 10px; color: var(--ink); }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .grid, .grid.two { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 12px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 15px; }
+.card .sub { margin: 0 0 10px; font-size: 12.5px; color: var(--ink-2); }
+.card.wide { grid-column: 1 / -1; }
+.empty { color: var(--ink-2); font-size: 13.5px; padding: 6px 0; }
+
+/* 橫條：每列 名稱｜條｜數字 */
+ol.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+ol.bars li { display: grid; grid-template-columns: minmax(5.5em, 10em) minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 2px 4px; margin: 0 -4px; border-radius: 6px; cursor: default; }
+ol.bars.ranked li { grid-template-columns: 1.6em minmax(5em, 10em) minmax(0, 1fr) auto; gap: 8px; }
+@media (max-width: 640px) {
+  ol.bars li { grid-template-columns: minmax(4.5em, 7.5em) minmax(0, 1fr) auto; }
+  ol.bars.ranked li { grid-template-columns: 1.4em minmax(4.5em, 7.5em) minmax(0, 1fr) auto; }
+}
+ol.bars li:hover, ol.bars li:focus-visible { background: var(--tint); }
+ol.bars .bl { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+ol.bars .bl small { display: block; font-size: 12px; color: var(--ink-2); }
+ol.bars .bt { height: 14px; display: flex; align-items: center; }
+ol.bars .bf { display: block; height: 14px; min-width: 2px; background: var(--bar); border-radius: 0 4px 4px 0; }
+ol.bars .bv { font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--ink); min-width: 2.5em; text-align: right; }
+ol.bars .rk { color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* 直條：時段、每日 */
+.cols { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 140px; border-bottom: 1px solid var(--line); padding-top: 18px; }
+.cols .c { flex: 1 1 0; max-width: 24px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; cursor: default; border-radius: 4px 4px 0 0; }
+.cols .c:hover .f, .cols .c:focus-visible .f { filter: brightness(1.15); }
+.cols .f { width: 100%; min-height: 0; background: var(--bar); border-radius: 4px 4px 0 0; }
+.cols .peak { position: absolute; top: -18px; font-size: 12px; color: var(--ink); white-space: nowrap; }
+.cols-wrap { display: flex; justify-content: center; }
+.cols-wrap .cols { flex: 1; justify-content: space-between; }
+.xax { display: flex; justify-content: space-between; gap: 2px; font-size: 12px; color: var(--ink-2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.xax span { flex: 1 1 0; max-width: 24px; text-align: center; white-space: nowrap; overflow: visible; display: flex; justify-content: center; }
+details.tv { margin-top: 8px; font-size: 13px; }
+details.tv summary { color: var(--ink-2); cursor: pointer; }
+details.tv table { border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
+details.tv td, details.tv th { border-bottom: 1px solid var(--line); padding: 2px 10px 2px 0; text-align: left; font-weight: 400; }
+
+/* 提問紀錄 */
+.qtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.qtabs button { border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 13.5px; cursor: pointer; }
+.qtabs button[aria-pressed="true"] { background: var(--house); border-color: var(--house); color: #fff; }
+@media (prefers-color-scheme: dark) { .qtabs button[aria-pressed="true"] { background: var(--tint); border-color: var(--accent); color: var(--ink); } }
+.qwrap { overflow-x: auto; }
+table.q { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.q th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--ink-2); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.q td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.q td.t { white-space: nowrap; color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 13px; }
+table.q td.txt { min-width: 14em; max-width: 28em; overflow-wrap: anywhere; }
+table.q .tag { display: inline-block; font-size: 12px; border-radius: 999px; padding: 0 8px; margin: 1px 4px 1px 0; background: var(--tint); color: var(--ink); white-space: nowrap; }
+table.q .tag.ai { background: transparent; border: 1px solid var(--accent); }
+table.q .muted { color: var(--ink-2); font-size: 12.5px; }
+.more-row { margin-top: 10px; }
+
+#tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--paper); font-size: 13px; line-height: 1.45; padding: 6px 10px; border-radius: 8px; max-width: 280px; opacity: 0; transition: opacity .08s; }
+#tip b { font-size: 14px; }
+.loading main .card, .loading main .kpi { opacity: .55; }
+@media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
+footer { max-width: 1180px; margin: 0 auto; padding: 0 16px 32px; font-size: 12.5px; color: var(--ink-2); }
+</style>
+</head>
+<body data-db="{{DB}}">
+<header class="top"><div class="in">
+  <h1>使用統計</h1>
+  <p>客製化加價小幫手後台，只有你看得到</p>
+</div></header>
+<main>
+  <div class="filters">
+    <div class="seg" role="group" aria-label="期間">
+      <button type="button" data-range="today">今天</button>
+      <button type="button" data-range="7" aria-pressed="true">7 天</button>
+      <button type="button" data-range="30">30 天</button>
+      <button type="button" data-range="90">90 天</button>
+    </div>
+    <span class="since" id="since"></span>
+    <span class="spacer"></span>
+    <a class="btn" id="csv" href="/api/questions.csv?range=7">下載提問 CSV</a>
+  </div>
+  <div id="notice"></div>
+
+  <section class="kpis" aria-label="總覽">
+    <div class="kpi"><div class="k">開啟次數</div><div class="v" id="k-visits">–</div><div class="s" id="k-visits-s">&nbsp;</div></div>
+    <div class="kpi"><div class="k">使用人數</div><div class="v" id="k-users">–</div><div class="s">每天分開計算後加總</div></div>
+    <div class="kpi"><div class="k">提問次數</div><div class="v" id="k-q">–</div><div class="s" id="k-q-s">&nbsp;</div></div>
+    <div class="kpi"><div class="k">交給 AI 回答</div><div class="v" id="k-ai">–</div><div class="s" id="k-ai-s">&nbsp;</div></div>
+  </section>
+
+  <h2>誰在用</h2>
+  <div class="grid">
+    <div class="card"><h3>縣市</h3><p class="sub">用 IP 推算。用手機網路時，常被算成電信機房所在的城市。</p><div id="c-regions"></div></div>
+    <div class="card"><h3>地區</h3><p class="sub">Cloudflare 提供的地名，前 10 名</p><div id="c-cities"></div></div>
+    <div class="card"><h3>網路業者</h3><p class="sub">用來判斷縣市準不準</p><div id="c-nets"></div></div>
+    <div class="card"><h3>裝置</h3><div id="c-devices"></div></div>
+    <div class="card"><h3>作業系統</h3><div id="c-os"></div></div>
+    <div class="card"><h3>開啟來源</h3><p class="sub">LINE、Facebook 內開啟，或從網站連過來</p><div id="c-sources"></div></div>
+  </div>
+
+  <h2>問了什麼</h2>
+  <div class="grid two">
+    <div class="card"><h3>最常被問的飲品</h3><p class="sub">前 10 名，冰、熱合併計算</p><div id="c-drinks"></div></div>
+    <div class="card"><h3>最常被問的問題類型</h3><p class="sub">前 10 名</p><div id="c-topics"></div></div>
+    <div class="card"><h3 id="daily-title">每日提問次數</h3><div id="c-daily"></div></div>
+    <div class="card"><h3>提問時段</h3><p class="sub">台北時間，0～23 點</p><div id="c-hours"></div></div>
+  </div>
+
+  <h2>可以優化的輸入</h2>
+  <div class="grid">
+    <div class="card"><h3>模糊比對的字</h3><p class="sub">輸入不完整、要猜或要選的字，前 10 名</p><div id="c-fuzzy"></div></div>
+    <div class="card"><h3>自動更正</h3><p class="sub">同音錯字，前 10 名</p><div id="c-typos"></div></div>
+    <div class="card"><h3>提問方式</h3><p class="sub">自己輸入，或點建議問題、點飲品</p><div id="c-origins"></div></div>
+  </div>
+
+  <h2>提問紀錄</h2>
+  <div class="card wide">
+    <div class="qtabs" role="group" aria-label="篩選提問">
+      <button type="button" data-filter="all" aria-pressed="true">全部</button>
+      <button type="button" data-filter="ai">交給 AI</button>
+      <button type="button" data-filter="unclear">規則沒答到</button>
+      <button type="button" data-filter="fuzzy">模糊比對</button>
+      <button type="button" data-filter="choose">請選飲品</button>
+      <button type="button" data-filter="typo">自動更正</button>
+    </div>
+    <div class="qwrap"><table class="q">
+      <thead><tr><th>時間</th><th>原句</th><th>判讀結果</th><th>回答</th><th>縣市／裝置</th></tr></thead>
+      <tbody id="q-body"></tbody>
+    </table></div>
+    <div class="more-row"><button type="button" class="btn" id="q-more" hidden>載入更多</button></div>
+  </div>
+</main>
+<footer>原句保留 180 天，過期自動刪除，統計數字保留。不記錄 IP、不放 cookie。</footer>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script nonce="{{NONCE}}">
+(() => {
+  const $ = s => document.querySelector(s);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const fmt = n => Number(n || 0).toLocaleString('zh-TW');
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  let range = '7', filter = 'all', lastTs = 0;
+
+  // ---------- 提示框（滑鼠或鍵盤焦點） ----------
+  const tip = $('#tip');
+  function showTip(target, lines) {
+    tip.replaceChildren();
+    lines.forEach((t, i) => { const line = el(i ? 'div' : 'b', null, t); tip.appendChild(line); });
+    const r = target.getBoundingClientRect();
+    tip.style.opacity = '1';
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let x = Math.min(window.innerWidth - w - 8, Math.max(8, r.left + r.width / 2 - w / 2));
+    let y = r.top - h - 8; if (y < 8) y = r.bottom + 8;
+    tip.style.left = `${x}px`; tip.style.top = `${y}px`;
+  }
+  const hideTip = () => { tip.style.opacity = '0'; };
+  function hover(node, lines) {
+    node.tabIndex = 0;
+    node.setAttribute('aria-label', lines.join('，'));
+    node.addEventListener('pointerenter', () => showTip(node, lines));
+    node.addEventListener('pointerleave', hideTip);
+    node.addEventListener('focus', () => showTip(node, lines));
+    node.addEventListener('blur', hideTip);
+  }
+
+  // ---------- 橫條排行 ----------
+  function bars(id, rows, { rank = false, unit = '次', detail, share = false } = {}) {
+    const box = $(id);
+    box.replaceChildren();
+    if (!rows || !rows.length) { box.appendChild(el('p', 'empty', '這段期間還沒有資料。')); return; }
+    const max = Math.max(...rows.map(r => r.n), 1);
+    const total = rows.reduce((s, r) => s + r.n, 0);
+    const ol = el('ol', rank ? 'bars ranked' : 'bars');
+    rows.forEach((r, i) => {
+      const li = el('li');
+      if (rank) li.appendChild(el('span', 'rk', `${i + 1}`));
+      const bl = el('span', 'bl', r.label ?? r.name);
+      if (r.sub) bl.appendChild(el('small', null, r.sub));
+      const bt = el('span', 'bt'); const bf = el('span', 'bf'); bf.style.width = `${(r.n / max) * 100}%`; bt.appendChild(bf);
+      li.append(bl, bt, el('span', 'bv', fmt(r.n)));
+      const name = [r.label ?? r.name, r.sub].filter(Boolean).join('，');
+      const lines = [`${fmt(r.n)} ${unit}`, share ? `${name}，占 ${pct(r.n, total)}%` : name];
+      if (detail) lines.push(...detail(r));
+      hover(li, lines);
+      ol.appendChild(li);
+    });
+    box.appendChild(ol);
+  }
+
+  // ---------- 直條（時段、每日） ----------
+  function cols(id, rows, { xLabels, name, unit = '次' }) {
+    const box = $(id);
+    box.replaceChildren();
+    const total = rows.reduce((s, r) => s + r.n, 0);
+    if (!total) { box.appendChild(el('p', 'empty', '這段期間還沒有資料。')); return; }
+    const max = Math.max(...rows.map(r => r.n), 1);
+    const peak = rows.findIndex(r => r.n === max);
+    const wrap = el('div', 'cols-wrap'); const c = el('div', 'cols');
+    rows.forEach((r, i) => {
+      const col = el('div', 'c'); const f = el('div', 'f'); f.style.height = `${(r.n / max) * 100}%`;
+      if (i === peak) col.appendChild(el('span', 'peak', fmt(r.n)));
+      col.appendChild(f);
+      hover(col, [`${fmt(r.n)} ${unit}`, name(r)]);
+      c.appendChild(col);
+    });
+    wrap.appendChild(c); box.appendChild(wrap);
+    const xa = el('div', 'xax'); rows.forEach((r, i) => xa.appendChild(el('span', null, xLabels[i] ?? ''))); box.appendChild(xa);
+    const d = el('details', 'tv'); d.appendChild(el('summary', null, '看數字'));
+    const tb = el('table'); rows.forEach(r => { const tr = el('tr'); tr.append(el('th', null, name(r)), el('td', null, fmt(r.n))); tb.appendChild(tr); });
+    d.appendChild(tb); box.appendChild(d);
+  }
+
+  function dayList(since, days, daily) {
+    const m = new Map(daily.map(d => [d.day, d.questions]));
+    const out = []; const start = new Date(`${since}T00:00:00Z`);
+    for (let i = 0; i < days; i++) { const d = new Date(start.getTime() + i * 86400e3).toISOString().slice(0, 10); out.push({ day: d, n: m.get(d) || 0 }); }
+    return out;
+  }
+
+  async function load() {
+    document.body.classList.add('loading');
+    try {
+      const res = await fetch(`/api/stats?range=${range}`, { credentials: 'same-origin' });
+      const s = await res.json();
+      if (!res.ok) throw new Error(s.error || res.status);
+      $('#since').textContent = range === 'today' ? `${s.since}（台北時間）` : `${s.since} 起`;
+      $('#k-visits').textContent = fmt(s.kpi.visits);
+      $('#k-users').textContent = fmt(s.kpi.users);
+      $('#k-q').textContent = fmt(s.kpi.questions);
+      $('#k-q-s').textContent = s.kpi.askers ? `平均每人 ${(s.kpi.questions / Math.max(1, s.kpi.askers)).toFixed(1)} 題` : ' ';
+      $('#k-ai').textContent = `${pct(s.kpi.ai, s.kpi.questions)}%`;
+      $('#k-ai-s').textContent = `${fmt(s.kpi.ai)} 題；自動更正 ${fmt(s.kpi.typos)} 題`;
+      $('#k-visits-s').textContent = s.kpi.visits ? `其中手機 ${pct((s.devices.find(d => d.label === '手機') || {}).n || 0, s.kpi.visits)}%` : ' ';
+
+      bars('#c-regions', s.regions.slice(0, 12), { rank: true, share: true });
+      bars('#c-cities', s.cities, { rank: true });
+      bars('#c-nets', s.nets, { share: true });
+      bars('#c-devices', s.devices, { share: true });
+      bars('#c-os', s.os, { share: true });
+      bars('#c-sources', s.sources, { share: true });
+      const part = (k, r) => (k === r.name && r.parts[`冰${k}`] ? `熱${k}` : k);
+      bars('#c-drinks', s.drinks, { rank: true, detail: r => Object.entries(r.parts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${part(k, r)} ${fmt(v)}`) });
+      bars('#c-topics', s.topics, { rank: true });
+      bars('#c-fuzzy', s.fuzzy, { rank: true });
+      bars('#c-typos', s.typos, { rank: true });
+      bars('#c-origins', s.origins, { share: true });
+
+      const hours = s.hours.map((n, h) => ({ h, n }));
+      cols('#c-hours', hours, { xLabels: { 0: '0', 6: '6', 12: '12', 18: '18', 23: '23' }, name: r => `${r.h}:00～${r.h}:59` });
+      if (s.days > 1) {
+        const dl = dayList(s.since, s.days, s.daily);
+        cols('#c-daily', dl, { xLabels: { 0: dl[0].day.slice(5), [dl.length - 1]: dl[dl.length - 1].day.slice(5) }, name: r => r.day });
+      } else {
+        $('#c-daily').replaceChildren(el('p', 'empty', '選 7 天以上，可以看每日變化。'));
+      }
+    } catch (e) {
+      $('#notice').replaceChildren(Object.assign(el('div', 'notice'), { textContent: `讀取失敗：${e.message}` }));
+    } finally {
+      document.body.classList.remove('loading');
+    }
+  }
+
+  // ---------- 提問紀錄 ----------
+  function tag(text, cls) { return el('span', `tag${cls ? ` ${cls}` : ''}`, text); }
+  function addRows(list) {
+    const tb = $('#q-body');
+    for (const q of list) {
+      const tr = el('tr');
+      tr.appendChild(el('td', 't', q.time.slice(5)));
+      const txt = el('td', 'txt', q.text ?? '（已過保留期限）');
+      if (q.from !== '輸入') { txt.appendChild(el('div', 'muted', q.from)); }
+      tr.appendChild(txt);
+      const res = el('td');
+      q.drinks.forEach(d => res.appendChild(tag(d)));
+      q.topics.forEach(t => res.appendChild(tag(t)));
+      if (q.fuzzy) res.appendChild(el('div', 'muted', `模糊比對：「${q.fuzzy}」`));
+      if (q.typos.length) res.appendChild(el('div', 'muted', `已更正：${q.typos.join('、')}`));
+      if (!res.childNodes.length) res.appendChild(el('span', 'muted', q.kind));
+      tr.appendChild(res);
+      const via = el('td'); via.appendChild(tag(q.via, q.viaKey === 'local' ? '' : 'ai')); tr.appendChild(via);
+      tr.appendChild(el('td', 'muted', [q.region, q.device].filter(Boolean).join('／')));
+      tb.appendChild(tr);
+    }
+  }
+  async function loadQuestions(reset = true) {
+    if (reset) { $('#q-body').replaceChildren(); lastTs = 0; }
+    const res = await fetch(`/api/questions?range=${range}&filter=${filter}&limit=50${lastTs ? `&before=${lastTs}` : ''}`, { credentials: 'same-origin' });
+    const list = res.ok ? await res.json() : [];
+    if (reset && !list.length) {
+      const tr = el('tr'); const td = el('td', 'empty', '這段期間沒有符合的提問。'); td.colSpan = 5; tr.appendChild(td); $('#q-body').appendChild(tr);
+    }
+    addRows(list);
+    if (list.length) lastTs = list[list.length - 1].ts;
+    $('#q-more').hidden = list.length < 50;
+  }
+
+  document.querySelectorAll('[data-range]').forEach(b => b.addEventListener('click', () => {
+    range = b.dataset.range;
+    document.querySelectorAll('[data-range]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $('#csv').href = `/api/questions.csv?range=${range}`;
+    load(); loadQuestions();
+  }));
+  document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
+    filter = b.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    loadQuestions();
+  }));
+  $('#q-more').addEventListener('click', () => loadQuestions(false));
+
+  if (document.body.dataset.db !== '1') {
+    $('#notice').replaceChildren(Object.assign(el('div', 'notice'), { textContent: '資料庫還沒連接：請把 D1 的 Database ID 填進 admin/wrangler.toml 與主站的 wrangler.toml。' }));
+    return;
+  }
+  load(); loadQuestions();
+})();
+</script>
+</body>
+</html>

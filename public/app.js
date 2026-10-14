@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610140226';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610140226';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610140226';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610140602';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, TOPIC_BY_ID, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610140602';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610140602';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -14,6 +14,46 @@ const API_URL = (window.APP_CONFIG && 'apiUrl' in window.APP_CONFIG)
 const MARK_CHIP = '看不懂，標給我看';
 // 網址加 ?debug=1：訊息下方顯示語意比對分數（調整例句、門檻用）
 const DEBUG = new URLSearchParams(location.search).has('debug');
+
+// ---------- 匿名使用統計：只送到自己的 Worker（/api/e），GitHub Pages 不送 ----------
+// 網址加 #nostats：這台裝置以後不列入統計（自己測試用）；#stats 恢復
+const STATS_URL = API_URL === '/api/chat' ? '/api/e' : null;
+const NO_STATS = 'cfa-nostats';
+if (location.hash === '#nostats' || location.hash === '#stats') {
+  try { location.hash === '#nostats' ? localStorage.setItem(NO_STATS, '1') : localStorage.removeItem(NO_STATS); } catch { /* 無痕模式 */ }
+  history.replaceState(null, '', location.pathname + location.search);
+}
+function track(payload) {
+  if (!STATS_URL) return;
+  try { if (localStorage.getItem(NO_STATS) === '1') return; } catch { /* 無痕模式照常統計 */ }
+  try {
+    const body = JSON.stringify(payload);
+    const sent = navigator.sendBeacon && navigator.sendBeacon(STATS_URL, new Blob([body], { type: 'application/json' }));
+    if (!sent) fetch(STATS_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  } catch { /* 統計失敗不影響使用 */ }
+}
+const baseDrink = n => String(n || '').replace(/（.*$/, '');
+function trackAsk(r, userText, from) {
+  const o = r?.order;
+  // 追問沿用上一杯：不重複計入飲品排行
+  const drinks = r?.followup ? []
+    : o?.kind === 'drink' ? [o.drink?.n || o.summary?.name]
+      : o?.kind === 'multi' ? o.drinks.map(d => d.name)
+        : (r?.refs || []).map(d => d.name);
+  // 單杯試算的問題類型只算實際點到的加價項目（預設的「哪些飲品有奶」不算）
+  const topics = o?.kind === 'drink' ? (o.topics || []) : o ? [] : (r?.topics || []);
+  track({
+    t: 'q',
+    q: userText,
+    from,
+    via: !r ? 'error' : o?.aiSaid ? 'ai_order' : r.source === 'ai' ? 'ai' : 'local',
+    kind: !r ? 'none' : r.followup ? 'followup' : o?.kind || (r.quote ? 'quote' : r.faq?.length ? 'faq' : r.refs?.length ? 'refs' : 'text'),
+    drinks: drinks.map(baseDrink).filter(Boolean),
+    topics: topics.map(id => TOPIC_BY_ID[id]?.title || id),
+    typos: (r?.typos || []).map(f => `${f.from}→${f.to}`),
+    fuzzy: o?.kind === 'choose' ? o.said : (o?.match?.fuzzy ? o.match.said : null),
+  });
+}
 
 const $ = sel => document.querySelector(sel);
 const log = $('#log');
@@ -288,7 +328,7 @@ function setChips(list, current = '', title = '接著問') {
     b.type = 'button';
     b.className = 'chip' + (text === MARK_CHIP ? ' chip-mark' : '');
     b.textContent = text;
-    b.addEventListener('click', () => send(text));
+    b.addEventListener('click', () => send(text, 'chip'));
     chipsEl.appendChild(b);
   }
   chipsEl.scrollLeft = 0;
@@ -333,6 +373,7 @@ const healthNote = h => (h === 'allergy' ? ALLERGY_NOTE : HEALTH_NOTE);
 const typoNote = list => (list?.length ? `<p class="typo-note">已自動更正：${list.map(f => `${esc(f.from)}→${esc(f.to)}`).join('、')}</p>` : '');
 
 function botReply(r, userText) {
+  trackAsk(r, userText, state.from);
   let body = r.order ? renderOrder(r.order) : (r.quote ? renderQuote(r.quote) : renderText(r.text));
   if (r.typos?.length && r.order?.kind !== 'drink') body = typoNote(r.typos) + body;
   if (r.refs?.length) body += renderRefs(r.refs, r.refsTitle);
@@ -499,10 +540,11 @@ function aiOrder(reply) {
 }
 
 // ---------- 送出 ----------
-async function send(text) {
+async function send(text, from = 'typed') {
   text = (text || '').trim();
   if (!text || state.busy) return;
   state.busy = true;
+  state.from = from;
   sendBtn.disabled = true;
   input.value = '';
   autoGrow();
@@ -586,6 +628,7 @@ async function send(text) {
     } else {
       if (dietAsk) { botReply(dietReply(diet.diet), text); return; }
       if (local) { botReply(local, text); return; }
+      trackAsk(null, text, from);
       const msg = AI_ERRORS[ai.error] || 'AI 暫時無法回覆，請稍後再試，或點下面的常見問題。';
       addMessage('bot', renderText(msg), '系統訊息');
       state.history.pop();
@@ -600,7 +643,7 @@ async function send(text) {
 // 「你是指哪一杯？」與「不是這杯？」的按鈕：直接用那杯重新試算
 log.addEventListener('click', e => {
   const b = e.target.closest('[data-send]');
-  if (b && !state.busy) send(b.dataset.send);
+  if (b && !state.busy) send(b.dataset.send, 'tap');
 });
 
 // ---------- 圖片檢視 ----------
@@ -683,3 +726,7 @@ addMessage('bot', renderText(
 `嗨！輸入飲品和調整，我幫你算好，例如「冰那堤大杯換燕麥奶」。
 收費看不懂，我會在圖表上用螢光筆標出來。${wide.matches ? '' : '\n完整收費圖表在右上角。'}`, { fold: false }), '依收費規則回覆');
 setChips(WELCOME_CHIPS, '', '常見問題');
+{
+  const q = new URLSearchParams(location.search);
+  track({ t: 'v', ref: document.referrer, utm: q.get('utm_source') || '', tp: navigator.maxTouchPoints || 0 });
+}
