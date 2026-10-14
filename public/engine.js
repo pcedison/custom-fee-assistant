@@ -1,9 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610140602';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610140602';
-import { HOMOPHONES } from './homophones.js?v=202610140602';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141007';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141007';
+import { HOMOPHONES } from './homophones.js?v=202610141007';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -516,7 +516,7 @@ const RE_FILLER = new RegExp([
   '(?:糖漿|糖)?(?:\\d|[一二兩三四五六七八九十半])下(?:糖漿|糖)?|半糖|微糖|少糖|減糖|無糖|去糖|不要糖|不加糖|少甜|微甜|無甜',
   '環保杯|自備杯|自帶杯|隨行杯|自備容器|保溫杯|自己的杯|帶杯|環保|買一送一|買1送1|一送一|1送1|好友分享|好友券|好友|bogo|baf|券|卷',
   '使用|都|用|各|自備|自帶|帶',
-  '正常冰|正常甜|正常|冰的|熱的|溫的|多冰',
+  '正常冰|正常甜|正常|冰的|熱的|溫的|多冰|風味|口味',
   '請問|我要|我想|想要|幫我|麻煩|多少錢|多少|價錢|價格|總共|一共|合計|試算|算一下|有奶嗎|有牛奶嗎|有沒有奶|含奶|會怎樣|可以嗎|可以|怎麼算',
   '不要|不用|沒有|沒帶|要|請|的|嗎|呢|吧|啊|喔|跟|和|還有|然後|另外|加上|再|換成|換|加|改|升級|多|點|杯|冰|熱|溫',
 ].map(x => `(?:${x})`).join('|'), 'g');
@@ -764,6 +764,13 @@ export function buildOrder(norm) {
       } else if ((d.m === 'oat' && it.id === 'milk_oat') || (d.m === 'coconut' && it.id === 'milk_coco')) {
         amount = 0; label = `${it.label}（本來就是）`;
       }
+    } else if (it.id === 'syrup_cane' && d.caneFree) {
+      // 店長說明：原配方有蔗糖糖漿的飲品，加蔗糖增加甜度不另收費
+      amount = 0; label = '蔗糖糖漿（加甜免費）'; f.status = '免費';
+      notes.push(`${dn}原配方就有蔗糖糖漿：加蔗糖增加甜度不另收費，最大上限「容量＋5 Pump」。加其他風味糖漿（香草、焦糖等）仍是 +$15。`);
+    } else if (it.group === 'syrup' && f.swap && d.syrupFixed) {
+      label = `加${it.label}`;
+      notes.push(`${dn}的原配方風味糖漿無法完全去除，不能「換」成別的風味；額外加${it.label}會同時有原本的風味＋${it.label.replace(/糖漿|醬$/, '')}風味，依額外添加 +$15。`);
     } else if (it.group === 'syrup' && f.swap) {
       amount = 0; label = `換成${it.label}`;
       notes.push('官網客製化頁：更換飲料原有的風味糖漿不另收費，額外添加才收 $15。');
@@ -785,8 +792,16 @@ export function buildOrder(norm) {
       }
     }
     if (it.id === 'o_matcha' && f.tag === 'powder') notes.push('圖表列的是「抹茶液」：加一份 $15，每杯限一份。');
-    lines.push({ id: it.id, label, amount });
+    lines.push({ id: it.id, label, amount, ...(f.status ? { status: f.status } : {}) });
   }
+
+  // 原配方風味糖漿無法去除：加其他風味時提醒會同時有兩種風味
+  if (d.syrupFixed && !d.nocustom && items.some(f => f.item.group === 'syrup' && f.item.id !== 'syrup_cane' && !f.swap)) {
+    notes.push(`${dn}的原配方風味無法完全去除：加其他風味糖漿後，會同時有原本的風味＋加的風味。`);
+  }
+  const noSugar = sweet && /無糖|去糖|不要糖|不加糖|不要加糖|無甜|不要甜/.test(sweet);
+  if (noSugar && !d.nocustom && d.syrupFixed) notes.push(`${dn}的原配方風味糖漿無法完全去除，只能依客製化規範調整甜度（減量）。`);
+  else if (noSugar && !d.nocustom && d.season) notes.push(`季節限定飲品不能把糖漿完全去掉（會影響整體風味），可以請夥伴說明能減少多少。`);
 
   if (sweet && !d.nocustom) {
     const sauceNote = d.sauce ? `這杯的甜味來自${d.sauce.split('為維持')[0]}，官網註明為維持風味最少 1 匙。` : '';

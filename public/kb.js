@@ -4,7 +4,7 @@
 // 以及最下方 buildSystemPrompt() 給 AI 的規則說明。
 // =============================================================
 
-import { DRINKS, MILK_LABEL, MENU_INFO, isDairyFree, dietSafe, dairyUnsure } from './drinks.js?v=202610140602';
+import { DRINKS, MILK_LABEL, MENU_INFO, CANE_FREE, SYRUP_FIXED, isDairyFree, dietSafe, dairyUnsure } from './drinks.js?v=202610141007';
 
 export const EFFECTIVE_DATE = '2026/10/12';
 export const ECO_CUP_DISCOUNT = 10;
@@ -267,8 +267,9 @@ export const TOPICS = [
     answer:
 `風味糖漿每種 **+$15**：蔗糖、香草、榛果、焦糖、鹹焦糖、摩卡醬。
 每杯每項限加一份。
+**例外：原配方就有蔗糖糖漿的飲品，加蔗糖增加甜度不另收費**（最大上限「容量＋5 Pump」），例如${CANE_FREE.slice(0, 6).join('、')}等 ${CANE_FREE.length} 款。輸入飲品名稱加「加蔗糖」，我會告訴你那杯要不要加錢。
 圖上另有「調整甜度 風味不變」的標示，想改甜度可以直接跟夥伴說。`,
-    simple: `想多加一種口味的糖漿（例如加榛果），一種 $15；同一種口味一杯只能加一次。`,
+    simple: `想多加一種口味的糖漿（例如加榛果），一種 $15；同一種口味一杯只能加一次。原配方有蔗糖的飲品，加蔗糖不用錢。`,
     regions: ['syrup_head', 'syrup_cane', 'syrup_hazel', 'syrup_saltcar', 'syrup_vanilla', 'syrup_caramel', 'syrup_mocha', 'syrup_note'],
     follow: ['可以調甜度嗎？', '加兩種糖漿多少？'],
   },
@@ -546,7 +547,8 @@ const row = (d, { diet = false } = {}) => {
   const price = d.sz ? d.sz.map(([l, p]) => `${l}${p}`).join(' ') : d.p.map((p, i) => (p == null ? null : `${L[i]}${p}`)).filter(Boolean).join(' ');
   const flags = [
     d.nocustom ? '不提供客製化' : d.noicecustom ? '不提供冰塊客製化' : '',
-    d.sweetAdj ? '可調整甜度' : '', d.decaf ? '無咖啡因' : '', d.caffeine ? '含咖啡因' : '',
+    d.sweetAdj ? '可調整甜度' : '', d.caneFree ? '加蔗糖免費' : '', d.syrupFixed ? '原風味糖漿無法去除' : '',
+    d.decaf ? '無咖啡因' : '', d.caffeine ? '含咖啡因' : '',
     d.allergen || '', d.limited ? '每日限量' : '', diet ? '' : d.upgrade || '', d.offMenu ? '店內菜單未列' : '',
     d.note || '', d.sauce || '',
   ].filter(Boolean).join('、');
@@ -591,7 +593,8 @@ export function buildSystemPrompt({ diet = null, focus = null, slim = false } = 
 - 冰量調整：少冰／去冰不加價。補奶類 +15 元、補飲料 +15 元。部分飲品不提供冰量調整。少冰／去冰飲品如需補奶類或飲料，將依標準配方製作，並酌收 15 元。
 - 濃縮咖啡：經典濃縮、低咖啡因未標加價。升級特選濃縮咖啡 +15 元／份；多加一份濃縮咖啡 +15 元／份（按份數計價）。本身不含濃縮的飲品（抹茶那堤、茶那堤、巧克力、星冰樂、冷萃等）：加一份一般濃縮 +15 元；加特選濃縮＝加濃縮 +15＋特選豆 +15，共 +30 元。
 - 奶類：全脂牛奶、低脂牛奶、豆奶、椰奶未標加價；燕麥奶 +20 元；杏仁堅果奶 +20 元。
-- 風味糖漿每種 +15 元：蔗糖、香草、榛果、焦糖、鹹焦糖、摩卡醬；每杯每項限一份。圖上另有「調整甜度 風味不變」的標示，但沒有寫價格與細節。
+- 風味糖漿每種 +15 元：蔗糖、香草、榛果、焦糖、鹹焦糖、摩卡醬；每杯每項限一份。例外：原配方有蔗糖糖漿的飲品（${CANE_FREE.join('、')}），加蔗糖增加甜度不另收費，最大上限「容量＋5 Pump」；加其他風味仍 +15 元。
+- 原配方風味糖漿無法完全去除的飲品（${SYRUP_FIXED.join('、')}）：只能依規範減少甜度；額外加其他風味時，原風味仍保留（兩種風味並存），點餐時要主動說明。季節限定飲品不能把糖漿完全去掉。圖上另有「調整甜度 風味不變」的標示，但沒有寫價格與細節。
 - 其他配料每項 +15 元：抹茶液、鮮奶油、可可碎片、福吉茶粉、摩卡風味淋醬、焦糖風味淋醬、蜂蜜紅柚醬、星冰樂咖啡液、季節性物料；每杯每項限一份（所以抹茶液不能再免費加 8 份，現在加一份收 15 元，最多一份）。
 - 高蛋白雲朵 +60 元，口味：香草風味、可可；每杯每項限一份。建議避免搭配熱飲、冰搖茶、星沁爽、星冰樂、Cold Foam、果汁類及冰淇淋系列飲品。
 - 店內菜單（${MENU_INFO.period}）：飲品資料標「不提供客製化」的完全不能客製（加料、換奶、冰量、甜度都不行）；標「不提供冰塊客製化」的不能少冰／去冰。標「可調整甜度」的，原飲品甜度可依個人喜好提供減量服務。標「無咖啡因」的原料不含咖啡因，但器具共用可能有些許殘留。星沁爽含咖啡因（咖啡生豆萃取）。

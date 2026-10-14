@@ -1,7 +1,7 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
 import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixHomophones, bafQuote, singleQuote, ecoCountFrom, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
-import { DRINKS, DRINK_ALIASES, dietSafe } from '../public/drinks.js';
+import { DRINKS, DRINK_ALIASES, CANE_FREE, SYRUP_FIXED, dietSafe } from '../public/drinks.js';
 import { HOMOPHONES } from '../public/homophones.js';
 import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
 import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
@@ -474,6 +474,36 @@ t('「哪些飲料有牛奶？」是問含奶清單，不是「熱牛奶」這�
     assert.notEqual(r?.order?.kind, 'drink', q);
   }
   assert.equal(order('熱牛奶大杯').drink.n, '熱牛奶');
+});
+
+console.log('加蔗糖免費（店長 2026/10/14）');
+t('店長截圖那一句：冰醇濃抹茶那堤大杯，蔗糖不收費，合計 $190', () => {
+  const o = reply('純濃抹茶那堤 少冰補滿 兩下蔗糖加香草糖漿 風味換低脂牛奶 大杯').order;
+  assert.equal(o.drink.n, '冰醇濃抹茶那堤');
+  assert.equal(o.lines.find(l => l.id === 'syrup_cane').amount, 0);
+  assert.equal(o.lines.find(l => l.id === 'syrup_vanilla').amount, 15);
+  assert.equal(o.basePrice + o.addTotal, 190);
+  assert.ok(!o.notes.some(n => /沒看懂/.test(n)), o.notes.join('/'));
+});
+t('圈選的飲品加蔗糖 $0；沒圈選的照收 $15', () => {
+  for (const q of ['焦糖瑪奇朵加蔗糖', '冰搖紅茶加蔗糖', '米香桂花那堤加蔗糖', '夏日冰柚冷萃咖啡加蔗糖', '伯爵茶那堤加糖', '西印度櫻桃紅茶加蔗糖']) {
+    assert.equal(order(q).lines.find(l => l.id === 'syrup_cane').amount, 0, q);
+  }
+  for (const q of ['冰那堤加蔗糖', '摩卡加蔗糖', '福吉茶那堤加蔗糖', '冷萃咖啡加蔗糖']) {
+    assert.equal(order(q).lines.find(l => l.id === 'syrup_cane').amount, 15, q);
+  }
+  assert.equal(order('焦糖瑪奇朵加榛果糖漿').lines.find(l => l.id === 'syrup_hazel').amount, 15);
+});
+t('圈選清單、無法去除風味清單的品名都對得到菜單', () => {
+  const bases = new Set(DRINKS.map(d => d.n.replace(/^熱/, '').replace(/^冰(?!搖)/, '')));
+  assert.deepEqual(CANE_FREE.filter(n => !bases.has(n)), []);
+  assert.deepEqual(SYRUP_FIXED.filter(n => !bases.has(n)), ['氮氣焦糖瑪奇朵']); // 店內菜單與官網都沒有這款
+});
+t('原風味無法去除：換糖漿改成加糖漿 +$15，並提醒兩種風味並存', () => {
+  const o = order('焦糖瑪奇朵換成香草糖漿');
+  assert.equal(o.lines.find(l => l.id === 'syrup_vanilla').amount, 15);
+  assert.ok(o.notes.some(n => /無法完全去除/.test(n)));
+  assert.ok(order('焦糖瑪奇朵無糖').notes.some(n => /無法完全去除/.test(n)));
 });
 
 console.log('同音錯字');
