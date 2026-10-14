@@ -1,83 +1,27 @@
 <!doctype html>
-<html lang="zh-Hant-TW">
+<html lang="zh-Hant">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
-  <title>客製化加價小幫手</title>
-  <meta name="description" content="2026/10/12 起客製化服務收費問答與加價試算，看不懂的地方會在收費圖表上標示重點。">
-  <meta name="theme-color" content="#1E3932" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#14231E" media="(prefers-color-scheme: dark)">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <script>try { if (localStorage.getItem('chartHidden') === '1') document.documentElement.classList.add('chart-hidden'); } catch (e) {}</script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@85..110,500..800&display=swap">
-  <link rel="stylesheet" href="style.css?v=202610140226">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>客製化加價小幫手</title>
+<link rel="canonical" href="https://custom-fee-assistant.vibebricktech.workers.dev/">
+<meta http-equiv="refresh" content="0; url=https://custom-fee-assistant.vibebricktech.workers.dev/?utm_source=github">
+<script>
+  location.replace('https://custom-fee-assistant.vibebricktech.workers.dev/?utm_source=github' + location.hash);
+</script>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #F2F0EB; color: #1F1F1F;
+    font: 16px/1.7 "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+  main { padding: 24px 16px; text-align: center; }
+  a { color: #00754A; font-weight: 700; }
+  @media (prefers-color-scheme: dark) { body { background: #0F1B17; color: #F2F0EB; } a { color: #5CC79C; } }
+</style>
 </head>
 <body>
-  <div class="app">
-    <main class="chat" aria-label="客製化加價問答">
-      <header class="chat-head">
-        <div class="avatar avatar-lg" aria-hidden="true">
-          <svg viewBox="0 0 40 40"><path d="M11 12h18l-2.2 19.5a2.5 2.5 0 0 1-2.5 2.2h-8.6a2.5 2.5 0 0 1-2.5-2.2Z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M9.5 12h21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M13 19.5l14.5-2.2" stroke="var(--logo-swipe)" stroke-width="5" stroke-linecap="round"/></svg>
-        </div>
-        <div class="head-text">
-          <h1>客製化加價小幫手</h1>
-          <p>10/12 起客製化新制</p>
-        </div>
-        <button type="button" class="head-btn" id="chartBtn" aria-label="查看收費圖表" aria-controls="panel">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 9h6M7 12.5h10M7 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          <span class="lbl-m"><span class="lbl-x">收費</span>圖表</span><span class="lbl-d">顯示圖表</span>
-          <span class="new-dot" aria-hidden="true"></span>
-        </button>
-      </header>
-
-      <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions">
-        <p class="day"><span>今天</span></p>
-      </div>
-
-      <footer class="composer">
-        <div class="chips" id="chips" aria-label="建議問題"></div>
-        <form id="form" class="input-row" autocomplete="off">
-          <textarea id="input" rows="1" maxlength="300" enterkeyhint="send"
-            placeholder="例如：冰那堤大杯去冰補奶" aria-label="輸入問題"></textarea>
-          <button id="send" type="submit" aria-label="送出">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5 19 5.5l-4.8 14-2.6-5.8Z" fill="currentColor"/><path d="m11.6 13.7 3-3" stroke="var(--send-ink)" stroke-width="1.6" stroke-linecap="round"/></svg>
-          </button>
-        </form>
-        <p class="fine">實際金額以門市結帳為準</p>
-      </footer>
-    </main>
-
-    <aside class="panel" id="panel" aria-label="收費圖表">
-      <div class="panel-inner">
-        <div class="panel-head">
-          <h2>收費圖表</h2>
-          <button type="button" class="panel-hide" id="panelHide" aria-controls="panel" aria-expanded="true">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14.5 4.5v15" stroke="currentColor" stroke-width="1.8"/><path d="m8 9 3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>隱藏圖表</span>
-          </button>
-        </div>
-        <p id="panelCaption">最新一題的重點會用螢光筆標在這裡。</p>
-        <button type="button" class="panel-btn" id="panelBtn" aria-label="放大收費圖表">
-          <img id="panelImg" alt="客製化收費圖表" width="1285" height="1274">
-        </button>
-      </div>
-    </aside>
-  </div>
-
-  <dialog id="viewer" aria-label="圖片檢視">
-    <div class="viewer-bar">
-      <div class="viewer-tabs" id="viewerTabs"></div>
-      <a id="viewerDl" class="viewer-act" download="客製化收費-標示.jpg">下載</a>
-      <button type="button" id="viewerClose" class="viewer-act" aria-label="關閉">關閉</button>
-    </div>
-    <div class="viewer-body">
-      <img id="viewerImg" alt="標示後的收費圖表">
-    </div>
-    <p class="viewer-hint">點圖片可以放大或縮小</p>
-  </dialog>
-
-  <script type="module" src="app.js?v=202610140226"></script>
+<main>
+  <p>客製化加價小幫手已搬到新網址。</p>
+  <p><a href="https://custom-fee-assistant.vibebricktech.workers.dev/?utm_source=github">前往新網址</a></p>
+</main>
 </body>
 </html>
