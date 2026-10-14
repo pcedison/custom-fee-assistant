@@ -1,7 +1,7 @@
 // 執行：npm test（或 node tests/engine.test.mjs）
 import assert from 'node:assert/strict';
 import { localReply, computeQuote, normalize, parseAiReply, buildOrder, fixHomophones, bafQuote, singleQuote, ecoCountFrom, fixFacts, isClarify, dietFor, dietProblems, guardDietReply, dietFallback } from '../public/engine.js';
-import { DRINKS, DRINK_ALIASES, CANE_FREE, SYRUP_FIXED, dietSafe } from '../public/drinks.js';
+import { DRINKS, DRINK_ALIASES, CANE_FREE, BASE_SYRUP, dietSafe } from '../public/drinks.js';
 import { HOMOPHONES } from '../public/homophones.js';
 import { buildSystemPrompt, ROUTE_EXAMPLES, ROUTE_NEAR_MISS } from '../public/kb.js';
 import { decideRoute, semanticRoute, resetBank, BANK } from '../functions/api/semantic.js';
@@ -494,16 +494,27 @@ t('圈選的飲品加蔗糖 $0；沒圈選的照收 $15', () => {
   }
   assert.equal(order('焦糖瑪奇朵加榛果糖漿').lines.find(l => l.id === 'syrup_hazel').amount, 15);
 });
-t('圈選清單、無法去除風味清單的品名都對得到菜單', () => {
+t('蔗糖清單、基底糖漿清單的品名都對得到菜單', () => {
   const bases = new Set(DRINKS.map(d => d.n.replace(/^熱/, '').replace(/^冰(?!搖)/, '')));
   assert.deepEqual(CANE_FREE.filter(n => !bases.has(n)), []);
-  assert.deepEqual(SYRUP_FIXED.filter(n => !bases.has(n)), ['氮氣焦糖瑪奇朵']); // 店內菜單與官網都沒有這款
+  assert.deepEqual(Object.keys(BASE_SYRUP).filter(n => !bases.has(n)), []);
 });
-t('原風味無法去除：換糖漿改成加糖漿 +$15，並提醒兩種風味並存', () => {
-  const o = order('焦糖瑪奇朵換成香草糖漿');
-  assert.equal(o.lines.find(l => l.id === 'syrup_vanilla').amount, 15);
-  assert.ok(o.notes.some(n => /無法完全去除/.test(n)));
-  assert.ok(order('焦糖瑪奇朵無糖').notes.some(n => /無法完全去除/.test(n)));
+t('沒有免費更換糖漿：換成別的風味＝加 +$15', () => {
+  assert.equal(order('冰那堤換成香草糖漿').lines.find(l => l.id === 'syrup_vanilla').amount, 15);
+  const o = order('焦糖瑪奇朵換鹹焦糖');
+  assert.equal(o.lines.find(l => l.id === 'syrup_saltcar').amount, 15);
+  assert.ok(o.notes.some(n => /香草基底最少要 1 下/.test(n)));
+});
+t('基底糖漿最少 1 下：「不要香草」不會變成加香草', () => {
+  for (const q of ['焦糖瑪奇朵不要香草', '焦糖瑪奇朵去掉香草糖漿', '伯爵茶那堤香草不要']) {
+    const o = order(q);
+    assert.ok(!o.lines.some(l => l.id === 'syrup_vanilla'), q);
+    assert.equal(o.lines.find(l => l.id === 'base_rm')?.status, '最少 1 下', q);
+  }
+});
+t('甜度只調蔗糖：有基底糖漿的飲品說無糖，提醒最少 1 下；沒有基底的不提醒', () => {
+  assert.ok(order('伯爵茶那堤無糖').notes.some(n => /做不到完全無糖/.test(n)));
+  assert.ok(!order('冰搖紅茶無糖').notes.some(n => /基底/.test(n)));
 });
 
 console.log('同音錯字');

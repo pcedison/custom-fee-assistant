@@ -1,9 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141007';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141007';
-import { HOMOPHONES } from './homophones.js?v=202610141007';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141102';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141102';
+import { HOMOPHONES } from './homophones.js?v=202610141102';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -554,6 +554,8 @@ function multiTexts(fixed, picks) {
 }
 const RE_JOIN_EDGE = /^(還有|然後|加上|以及|再來|和|跟|與|及|、|，|,)+|(還有|然後|加上|以及|和|跟|與|及|、|，|,)+$/g;
 
+const RE_RM_BASE = /(?:不要|去掉|去除|拿掉|不加|移除|不放)(鹹焦糖|香草|焦糖|榛果)(?!風味淋醬|淋醬|醬)(?:風味)?(?:糖漿)?|(鹹焦糖|香草|焦糖|榛果)(?:風味)?(?:糖漿)?(?:不要|去掉|拿掉|移除)/g;
+
 export function buildOrder(norm) {
   const fixed = fixNames(norm);
   // 「冰搖茶」「冰搖檸檬茶」：店內菜單一列有紅茶、果茶兩種 → 讓人選
@@ -636,6 +638,10 @@ export function buildOrder(norm) {
       text: a.text,
     })),
   };
+
+  // 「不要香草」「去掉焦糖糖漿」：是要去掉，不是要加（店長：基底糖漿最少 1 下）
+  const removedBase = [];
+  itemsText = itemsText.replace(RE_RM_BASE, (m, a, b) => { removedBase.push(a || b); return BLANK.repeat(m.length); });
 
   const ex0 = {};
   const items = extractItems(itemsText, ex0);
@@ -768,12 +774,15 @@ export function buildOrder(norm) {
       // 店長說明：原配方有蔗糖糖漿的飲品，加蔗糖增加甜度不另收費
       amount = 0; label = '蔗糖糖漿（加甜免費）'; f.status = '免費';
       notes.push(`${dn}原配方就有蔗糖糖漿：加蔗糖增加甜度不另收費，最大上限「容量＋5 Pump」。加其他風味糖漿（香草、焦糖等）仍是 +$15。`);
-    } else if (it.group === 'syrup' && f.swap && d.syrupFixed) {
-      label = `加${it.label}`;
-      notes.push(`${dn}的原配方風味糖漿無法完全去除，不能「換」成別的風味；額外加${it.label}會同時有原本的風味＋${it.label.replace(/糖漿|醬$/, '')}風味，依額外添加 +$15。`);
     } else if (it.group === 'syrup' && f.swap) {
-      amount = 0; label = `換成${it.label}`;
-      notes.push('官網客製化頁：更換飲料原有的風味糖漿不另收費，額外添加才收 $15。');
+      // 店長 2026/10/14：沒有免費更換糖漿；改成別的風味＝額外添加 +$15，原本的基底最少 1 下
+      label = `加${it.label}`;
+      const fl = it.label.replace(/糖漿$|醬$/, '');
+      notes.push(d.baseSyrup
+        ? `${dn}的${d.baseSyrup}基底最少要 1 下，不能直接換：改成${fl}＝加${it.label} +$15，${d.baseSyrup}和${fl}風味並存。`
+        : d.caneFree
+          ? `${dn}原配方的蔗糖可以調整甜度；改加${it.label}依額外添加 +$15。`
+          : `糖漿沒有免費更換：加${it.label}依額外添加 +$15。`);
     } else if (it.group === 'protein') {
       const why = d.t === 'hot' ? '熱飲' : d.shaken ? '冰搖茶' : d.g === 'ref' ? '星沁爽' : d.g === 'frap' ? '星冰樂'
         : d.coldfoam ? 'Cold Foam 飲品' : d.g === 'juice' ? '果汁類' : d.g === 'float' ? '冰淇淋飲品' : '';
@@ -795,13 +804,27 @@ export function buildOrder(norm) {
     lines.push({ id: it.id, label, amount, ...(f.status ? { status: f.status } : {}) });
   }
 
-  // 原配方風味糖漿無法去除：加其他風味時提醒會同時有兩種風味
-  if (d.syrupFixed && !d.nocustom && items.some(f => f.item.group === 'syrup' && f.item.id !== 'syrup_cane' && !f.swap)) {
-    notes.push(`${dn}的原配方風味無法完全去除：加其他風味糖漿後，會同時有原本的風味＋加的風味。`);
+  // 店長 2026/10/14：基底糖漿（香草、焦糖、鹹焦糖、榛果）最少 1 下；甜度調整只調蔗糖糖漿
+  const added = items.filter(f => f.item.group === 'syrup' && !['syrup_cane', 'syrup_any'].includes(f.item.id) && !f.swap);
+  if (d.baseSyrup && !d.nocustom && added.length) {
+    notes.push(added.some(f => f.item.label.startsWith(d.baseSyrup))
+      ? `${dn}原配方已有${d.baseSyrup}基底；再加一份依額外添加 +$15。想更甜可以加蔗糖${d.caneFree ? '（這杯免費）' : '（+$15）'}。`
+      : `${dn}的${d.baseSyrup}基底會保留（最少 1 下）：加其他風味後，會同時有${d.baseSyrup}和加的風味。`);
+  }
+  for (const fl of d.nocustom ? [] : uniq(removedBase)) {
+    const own = d.baseSyrup === fl;
+    lines.push({ id: 'base_rm', label: `去掉${fl}糖漿`, amount: null, status: own ? '最少 1 下' : '以門市為準' });
+    if (own && notes.some(n => n.includes(`${fl}基底最少要 1 下`))) continue; // 換糖漿的提醒已經說了
+    notes.push(own ? `${dn}的${fl}基底糖漿最少要 1 下，不能完全去除。`
+      : d.baseSyrup ? `${dn}的基底糖漿是${d.baseSyrup}（最少要 1 下）；去掉${fl}請以門市為準。`
+        : `${dn}原配方沒有${fl}基底糖漿；能不能去掉請以門市為準。`);
   }
   const noSugar = sweet && /無糖|去糖|不要糖|不加糖|不要加糖|無甜|不要甜/.test(sweet);
-  if (noSugar && !d.nocustom && d.syrupFixed) notes.push(`${dn}的原配方風味糖漿無法完全去除，只能依客製化規範調整甜度（減量）。`);
-  else if (noSugar && !d.nocustom && d.season) notes.push(`季節限定飲品不能把糖漿完全去掉（會影響整體風味），可以請夥伴說明能減少多少。`);
+  if (sweet && !d.nocustom && d.baseSyrup) {
+    notes.push(`甜度調整只調蔗糖糖漿；${dn}的${d.baseSyrup}基底糖漿不能完全去除，最少要 1 下${noSugar ? '，所以做不到完全無糖' : ''}。`);
+  } else if (noSugar && !d.nocustom && d.season) {
+    notes.push('季節限定飲品不能把糖漿完全去掉（會影響整體風味），可以請夥伴說明能減少多少。');
+  }
 
   if (sweet && !d.nocustom) {
     const sauceNote = d.sauce ? `這杯的甜味來自${d.sauce.split('為維持')[0]}，官網註明為維持風味最少 1 匙。` : '';

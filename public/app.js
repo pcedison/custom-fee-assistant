@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610141007';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, TOPIC_BY_ID, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610141007';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610141007';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610141102';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, TOPIC_BY_ID, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610141102';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610141102';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -149,7 +149,7 @@ function renderOrder(o, opts = {}) {
 
 // ---------- 飲品卡片：單杯／買一送一，一張卡片看完 ----------
 // 忙碌時 0.4～1.3 秒掃讀：畫面上只留「杯型合計、冰量、加價、環保杯、合計」，其餘收進「詳細」
-const IMPORTANT = /沒看懂|不提供|沒有(短杯|中杯|大杯|特大杯)|(?<!能)不能補|不適用/;
+const IMPORTANT = /沒看懂|不提供|沒有(短杯|中杯|大杯|特大杯)|(?<!能)不能補|不適用|最少要 1 下/;
 const SHORT_SIZE = { 短杯: '短', 中杯: '中', 大杯: '大', 特大杯: '特大' };
 
 function defaultCardState(o, text) {
