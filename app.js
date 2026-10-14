@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610132345';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610132345';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610132345';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610140008';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610140008';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610140008';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。
@@ -95,13 +95,14 @@ function renderOrder(o, opts = {}) {
         </button></li>`).join('')}</ul>`;
   }
   if (o.kind === 'multi') {
-    return `<ul class="drink-list">${o.drinks.map(s => `
-      <li class="drink-card">
-        <div class="drink-row"><p class="drink-name">${esc(s.name)}</p>${milkTag(s)}</div>
-        <p class="drink-comp">${esc(s.comp)}</p>
-        <p class="drink-prices">${esc(s.prices)}</p>
-      </li>`).join('')}</ul>
-      <p class="note">加價試算請一杯一杯問，例如「${esc(o.drinks[0].name.replace(/（.*$/, ''))}去冰補滿大杯」。</p>`;
+    // 好幾杯：只列品名、含奶、價格；點一杯就算那一杯
+    return `
+      <p class="note">點一杯看合計</p>
+      <ul class="choose-list">${o.drinks.map(s => `
+        <li><button type="button" class="choose-btn" data-send="${esc(s.text)}">
+          <span class="drink-row"><span class="drink-name">${esc(s.name)}</span>${milkTag(s)}</span>
+          <span class="drink-prices">${esc(s.prices)}</span>
+        </button></li>`).join('')}</ul>`;
   }
   return renderDrinkCard(o, defaultCardState(o, ''), null);
 }
@@ -128,8 +129,8 @@ function cardView(o, st, o2) {
   if (st.mode === 'baf') {
     if (o2 && o2.kind !== 'drink') {
       error = o2?.kind === 'choose'
-        ? `名稱有「${o2.said}」的有好幾杯，請打完整品名，例如：${o2.options.slice(0, 3).map(x => x.name).join('、')}。`
-        : '看不懂第 2 杯，請打菜單上的品名。';
+        ? `名稱有「${o2.said}」的有好幾杯，請輸入完整品名，例如：${o2.options.slice(0, 3).map(x => x.name).join('、')}。`
+        : '看不懂第 2 杯，請輸入菜單上的品名。';
     } else {
       const free = x => ({ ...x, sizeIdx: null, sizeLabel: null });
       const q = bafQuote(free(o), free(o2 || o), { eco: st.eco });
@@ -215,11 +216,10 @@ function renderDrinkCard(o, st, o2, ask = null) {
 function renderRefs(list, title = '提到的飲品') {
   return `
     <div class="refs">
-      <p class="refs-title">${esc(title)}（成分、價格依官網，點一下可試算）</p>
+      <p class="refs-title">${esc(title)}（點一下可試算）</p>
       <ul class="choose-list">${list.map(s => `
         <li><button type="button" class="choose-btn" data-send="${esc(s.text)}">
           <span class="drink-row"><span class="drink-name">${esc(s.name)}</span>${milkTag(s)}</span>
-          ${s.comp && s.comp !== s.name.replace(/^[冰熱](?!搖)/, '') && s.comp !== s.name ? `<span class="ref-comp">${esc(s.comp)}</span>` : ''}
           <span class="drink-prices">${esc(s.prices)}</span>
         </button></li>`).join('')}</ul>
     </div>`;
@@ -554,7 +554,7 @@ async function send(text) {
         return;
       }
       if (ord && !ord.r) {
-        botReply({ source: 'ai', text: `我判讀成「${ord.text}」，但對不到菜單上的飲品，可以換個說法或打飲品名稱的關鍵字。`, topics: [] }, text);
+        botReply({ source: 'ai', text: `我判讀成「${ord.text}」，但對不到菜單上的飲品，可以換個說法，或輸入飲品名稱的關鍵字。`, topics: [] }, text);
         return;
       }
       const p = parseAiReply(ai.reply.replace(/^.*ORDER\s*[:：].*$/gim, ''));
@@ -674,6 +674,6 @@ form.addEventListener('submit', e => { e.preventDefault(); send(input.value); })
 panelImg.src = MENU_SRC;
 loadMenuImage(MENU_SRC).catch(() => {});
 addMessage('bot', renderText(
-`嗨！打飲品和調整，我幫你算好，例如「冰那堤大杯換燕麥奶」。
+`嗨！輸入飲品和調整，我幫你算好，例如「冰那堤大杯換燕麥奶」。
 收費看不懂，我會在圖表上用螢光筆標出來。${wide.matches ? '' : '\n完整收費圖表在右上角。'}`, { fold: false }), '依收費規則回覆');
 setChips(WELCOME_CHIPS, '', '常見問題');
