@@ -30,7 +30,9 @@ export async function checkAccess(request, env) {
   if (parts.length !== 3) return { ok: false, why: 'bad_token' };
   let header, payload;
   try { header = b64json(parts[0]); payload = b64json(parts[1]); } catch { return { ok: false, why: 'bad_token' }; }
-  const team = String(env.TEAM_DOMAIN || '').trim().replace(/\/+$/, '');
+  // TEAM_DOMAIN 可以只填網域（xxx.cloudflareaccess.com），這裡補上 https://
+  const rawTeam = String(env.TEAM_DOMAIN || '').trim().replace(/\/+$/, '');
+  const team = rawTeam && !/^https?:\/\//.test(rawTeam) ? `https://${rawTeam}` : rawTeam;
   const aud = String(env.POLICY_AUD || '').trim();
   if (!team || !aud) {
     return { ok: false, why: 'setup', iss: payload.iss, aud: Array.isArray(payload.aud) ? payload.aud[0] : payload.aud };

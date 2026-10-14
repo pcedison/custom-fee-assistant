@@ -601,11 +601,13 @@ await (async () => {
   const t0 = await jwt(good); const tampered = t0.replace(/\.[^.]+\./, `.${b64({ ...good, email: 'evil@example.com' })}.`);
   const forged = await checkAccess(req(tampered), env);
   const wrongEmail = await checkAccess(req(await jwt(good)), { ...env, ADMIN_EMAIL: 'someone@example.com' });
+  const bareTeam = await checkAccess(req(await jwt(good)), { TEAM_DOMAIN: TEAM.replace('https://', ''), POLICY_AUD: AUD });
   const devRemote = await checkAccess(req(null), { DEV_NO_ACCESS: '1' });
   const devLocal = await checkAccess(req(null, 'localhost:8788'), { DEV_NO_ACCESS: '1' });
   globalThis.fetch = realFetch;
   t('後台門禁：正確的 Access JWT 才能進入', () => {
     assert.equal(ok.ok, true);
+    assert.equal(bareTeam.ok, true);
     assert.equal(noToken.why, 'no_access');
     assert.deepEqual([setup.ok, setup.why, setup.iss, setup.aud], [false, 'setup', TEAM, AUD]);
     assert.equal(wrongAud.ok, false);

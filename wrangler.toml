@@ -27,11 +27,11 @@ ROUTE_DEBUG = "1"       # 開放 GET /api/route 校正工具（只算相似度�
 # 使用統計：提問原句保留天數（過期只刪原句，統計數字保留）
 STATS_TEXT_DAYS = "180"
 
-# 使用統計資料庫（後台 custom-fee-admin 也連同一個）。建立 D1 後填入 database_id 再取消註解
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "custom-fee-stats"
-# database_id = ""
+# 使用統計資料庫（後台 custom-fee-admin 也連同一個）
+[[d1_databases]]
+binding = "DB"
+database_name = "custom-fee-stats"
+database_id = "1261e515-3f10-4442-91b5-39796d1f0fe3"
 
 # 每天台北時間 03:00（UTC 19:00）清理過期的原句
 [triggers]
