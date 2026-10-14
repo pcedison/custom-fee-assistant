@@ -219,6 +219,8 @@ mark.price {
 .role.free { background: var(--tint); color: var(--accent-ink); }
 .cup2 { font-size: 13.5px; color: var(--ink-2); }
 
+.typo-note { font-size: 13px; line-height: 1.4; color: var(--accent-ink); }
+.bubble > .typo-note { margin-bottom: 6px; }
 .warn { font-size: 13.5px; line-height: 1.55; color: var(--warn); }
 .warn::before { content: "! "; font-weight: 700; }
 
