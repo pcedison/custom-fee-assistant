@@ -512,6 +512,24 @@ t('基底糖漿最少 1 下：「不要香草」不會變成加香草', () => {
     assert.equal(o.lines.find(l => l.id === 'base_rm')?.status, '最少 1 下', q);
   }
 });
+t('原本的基底再多加：不另收費（店長 2026/10/14）', () => {
+  for (const q of ['焦糖瑪奇朵加香草糖漿', '焦糖瑪奇朵香草多一下', '焦糖星冰樂多加焦糖', '香草風味星冰樂加香草']) {
+    const o = order(q);
+    const l = o.lines.find(x => x.id.startsWith('syrup_'));
+    assert.deepEqual([l.amount, l.status], [0, '免費'], q);
+  }
+  assert.equal(order('焦糖瑪奇朵加榛果').lines.find(l => l.id === 'syrup_hazel').amount, 15);
+});
+t('「甜一點」「加糖漿」：原配方有的糖漿多加免費；都沒有才 +$15', () => {
+  const amt = q => order(q).lines.filter(l => l.id.startsWith('syrup_')).map(l => l.amount);
+  assert.deepEqual(amt('冰搖紅茶甜一點'), [0]);
+  assert.deepEqual(amt('焦糖星冰樂再甜一點'), [0]);
+  assert.deepEqual(amt('冰那堤甜一點'), [15]);
+  assert.deepEqual(amt('冰搖紅茶加糖漿'), [0]);
+  assert.deepEqual(amt('冰那堤加糖漿'), [15]);
+  assert.ok(!order('冰那堤甜一點').notes.some(n => /沒看懂/.test(n)));
+  assert.equal(order('焦糖瑪奇朵少甜一點').lines.find(l => l.id === 'sweet').status, '可減量');
+});
 t('甜度只調蔗糖：有基底糖漿的飲品說無糖，提醒最少 1 下；沒有基底的不提醒', () => {
   assert.ok(order('伯爵茶那堤無糖').notes.some(n => /做不到完全無糖/.test(n)));
   assert.ok(!order('冰搖紅茶無糖').notes.some(n => /基底/.test(n)));

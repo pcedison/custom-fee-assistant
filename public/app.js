@@ -1,9 +1,9 @@
 // =============================================================
 // 聊天介面
 // =============================================================
-import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610141102';
-import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, TOPIC_BY_ID, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610141102';
-import { renderHighlight, loadMenuImage } from './highlight.js?v=202610141102';
+import { IMAGE, WELCOME_CHIPS, EFFECTIVE_DATE, BAF_RULES } from './kb.js?v=202610141143';
+import { localReply, parseAiReply, money, matchTopics, normalize, buildOrder, fixHomophones, TOPIC_BY_ID, orderToText, dietFor, guardDietReply, dietFallback, isClarify, bafQuote, singleQuote, sizesOf, ecoCountFrom } from './engine.js?v=202610141143';
+import { renderHighlight, loadMenuImage } from './highlight.js?v=202610141143';
 
 const MENU_SRC = window.__MENU_SRC || IMAGE.src;
 // AI 後端位置：可在頁面上用 window.APP_CONFIG = { apiUrl: '...' } 指定。

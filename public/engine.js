@@ -1,9 +1,9 @@
 // =============================================================
 // 關鍵字比對、加價試算、看不懂偵測（純函式，不碰 DOM，可在 Node 測試）
 // =============================================================
-import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141102';
-import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141102';
-import { HOMOPHONES } from './homophones.js?v=202610141102';
+import { TOPICS, ITEMS, REGIONS, ECO_CUP_DISCOUNT } from './kb.js?v=202610141143';
+import { DRINKS, DRINK_ALIASES, DRINK_CHOICES, NAME_FIXES, MILK_LABEL, hasMilk, refillType, hasEspresso, isChoiceDrink, isDairyFree, dietSafe, dairyUnsure, dietFor } from './drinks.js?v=202610141143';
+import { HOMOPHONES } from './homophones.js?v=202610141143';
 
 const NUM = '(\\d{1,2}|[一二兩三四五六七八九十]{1,3})';
 const CN = { 一: 1, 二: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -554,6 +554,8 @@ function multiTexts(fixed, picks) {
 }
 const RE_JOIN_EDGE = /^(還有|然後|加上|以及|再來|和|跟|與|及|、|，|,)+|(還有|然後|加上|以及|和|跟|與|及|、|，|,)+$/g;
 
+const RE_MORE_SYRUP = /(鹹焦糖|香草|焦糖|榛果|蔗糖)(?:風味)?(?:糖漿)?(?:多加一下|多加一點|多一下|多一點|多一些|加多一點)/g;
+const RE_SWEET_UP = /(?<![少微減不無])(?:再甜一點|多甜一點|甜一點|甜一些|多點甜|多一點甜|甜度高一點|甜度加|更甜|加甜)/g;
 const RE_RM_BASE = /(?:不要|去掉|去除|拿掉|不加|移除|不放)(鹹焦糖|香草|焦糖|榛果)(?!風味淋醬|淋醬|醬)(?:風味)?(?:糖漿)?|(鹹焦糖|香草|焦糖|榛果)(?:風味)?(?:糖漿)?(?:不要|去掉|拿掉|移除)/g;
 
 export function buildOrder(norm) {
@@ -642,6 +644,11 @@ export function buildOrder(norm) {
   // 「不要香草」「去掉焦糖糖漿」：是要去掉，不是要加（店長：基底糖漿最少 1 下）
   const removedBase = [];
   itemsText = itemsText.replace(RE_RM_BASE, (m, a, b) => { removedBase.push(a || b); return BLANK.repeat(m.length); });
+  // 「香草多一下」「焦糖多一點」＝加那一種糖漿
+  itemsText = itemsText.replace(RE_MORE_SYRUP, (m, fl) => `加${fl}糖漿`);
+  // 「甜一點」「加甜」：原配方有蔗糖 → 加蔗糖（免費）；只有基底糖漿 → 多加基底（免費）；都沒有 → 加蔗糖 +$15
+  const sweetUp = RE_SWEET_UP.test(itemsText);
+  if (sweetUp) itemsText = itemsText.replace(RE_SWEET_UP, d.caneFree || !d.baseSyrup ? '加蔗糖' : `加${d.baseSyrup}糖漿`);
 
   const ex0 = {};
   const items = extractItems(itemsText, ex0);
@@ -774,6 +781,15 @@ export function buildOrder(norm) {
       // 店長說明：原配方有蔗糖糖漿的飲品，加蔗糖增加甜度不另收費
       amount = 0; label = '蔗糖糖漿（加甜免費）'; f.status = '免費';
       notes.push(`${dn}原配方就有蔗糖糖漿：加蔗糖增加甜度不另收費，最大上限「容量＋5 Pump」。加其他風味糖漿（香草、焦糖等）仍是 +$15。`);
+    } else if (it.group === 'syrup' && d.baseSyrup && it.label.startsWith(d.baseSyrup)) {
+      // 店長 2026/10/14：原配方的基底糖漿再多加，不另收費
+      amount = 0; label = `多加${it.label}（原配方基底）`; f.status = '免費';
+      notes.push(`${dn}原配方就有${d.baseSyrup}基底：再多加${d.baseSyrup}糖漿不另收費。`);
+    } else if (it.id === 'syrup_any' && (d.caneFree || d.baseSyrup)) {
+      // 沒說口味的「加糖漿」：原配方有的糖漿多加，不另收費
+      amount = 0; f.status = '免費';
+      label = d.caneFree ? '蔗糖糖漿（加甜免費）' : `多加${d.baseSyrup}糖漿（原配方基底）`;
+      notes.push(`「加糖漿」以多加${d.caneFree ? '蔗糖' : d.baseSyrup}糖漿計算（這杯不另收費）；如果要加其他風味（香草、焦糖、榛果等），每種 +$15。`);
     } else if (it.group === 'syrup' && f.swap) {
       // 店長 2026/10/14：沒有免費更換糖漿；改成別的風味＝額外添加 +$15，原本的基底最少 1 下
       label = `加${it.label}`;
@@ -805,11 +821,15 @@ export function buildOrder(norm) {
   }
 
   // 店長 2026/10/14：基底糖漿（香草、焦糖、鹹焦糖、榛果）最少 1 下；甜度調整只調蔗糖糖漿
-  const added = items.filter(f => f.item.group === 'syrup' && !['syrup_cane', 'syrup_any'].includes(f.item.id) && !f.swap);
+  const added = items.filter(f => f.item.group === 'syrup' && !['syrup_cane', 'syrup_any'].includes(f.item.id) && !f.swap
+    && !(d.baseSyrup && f.item.label.startsWith(d.baseSyrup)));
   if (d.baseSyrup && !d.nocustom && added.length) {
-    notes.push(added.some(f => f.item.label.startsWith(d.baseSyrup))
-      ? `${dn}原配方已有${d.baseSyrup}基底；再加一份依額外添加 +$15。想更甜可以加蔗糖${d.caneFree ? '（這杯免費）' : '（+$15）'}。`
-      : `${dn}的${d.baseSyrup}基底會保留（最少 1 下）：加其他風味後，會同時有${d.baseSyrup}和加的風味。`);
+    notes.push(`${dn}的${d.baseSyrup}基底會保留（最少 1 下）：加其他風味後，會同時有${d.baseSyrup}和加的風味。`);
+  }
+  if (sweetUp && !d.nocustom && !d.caneFree) {
+    notes.push(d.baseSyrup
+      ? `要更甜：多加原本的${d.baseSyrup}基底不另收費；改加蔗糖是額外添加 +$15。`
+      : `${dn}原配方沒有蔗糖，要更甜＝加蔗糖，依額外添加 +$15。`);
   }
   for (const fl of d.nocustom ? [] : uniq(removedBase)) {
     const own = d.baseSyrup === fl;
