@@ -6,6 +6,11 @@ compatibility_date = "2026-09-01"
 # 開啟 https://custom-fee-assistant.<子網域>.workers.dev 網址
 workers_dev = true
 
+# 自訂短網址（2026/10/17 已在 Cloudflare 後台綁好；寫進設定檔，避免之後自動部署把它蓋掉）
+routes = [
+  { pattern = "coffee.vibebrick.com", custom_domain = true }
+]
+
 # 網站本體（聊天介面、圖表）
 [assets]
 directory = "./public"
